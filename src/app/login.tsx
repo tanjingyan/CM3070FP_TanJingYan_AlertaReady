@@ -1,9 +1,24 @@
 // Login screen
 
-import { StyleSheet, Text, View, TextInput, Pressable } from 'react-native';
+import { useState } from 'react';
+import { StyleSheet, Text, View, TextInput, Pressable, Alert } from 'react-native';
 import { router } from 'expo-router';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../firebase/firebaseConfig';
 
 export default function LoginScreen() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  async function handleLogin() {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      router.replace('/dashboard' as any);
+    } catch (error: any) {
+      Alert.alert('Login Failed', error.message);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.topSection} />
@@ -15,12 +30,12 @@ export default function LoginScreen() {
 
         <Text style={styles.title}>Login</Text>
 
-        <TextInput style={styles.input} placeholder="Email" />
-        <TextInput style={styles.input} placeholder="Password" secureTextEntry />
+        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} />
+        <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
 
         <Text style={styles.forgotText}>FORGOT YOUR PASSWORD?</Text>
 
-        <Pressable style={styles.button} onPress={() => router.push('/dashboard' as any)}>
+        <Pressable style={styles.button} onPress={handleLogin}>
           <Text style={styles.buttonText}>LOGIN</Text>
         </Pressable>
 
