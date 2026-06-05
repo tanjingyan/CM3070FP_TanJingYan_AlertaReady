@@ -19,7 +19,7 @@ export default function RegisterScreen() {
 
     try {
       await createUserWithEmailAndPassword(auth, email, password);
-      router.replace('/dashboard' as any);
+      router.replace('/(tabs)/dashboard' as any);
     } catch (error: any) {
       Alert.alert('Signup Failed', error.message);
     }
