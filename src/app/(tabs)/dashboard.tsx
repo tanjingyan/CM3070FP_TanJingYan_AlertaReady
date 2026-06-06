@@ -1,7 +1,10 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { auth } from '../../firebase/firebaseConfig';
 
 export default function DashboardScreen() {
+  const displayName = auth.currentUser?.displayName || 'User';
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
@@ -9,10 +12,11 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.greeting}>Good morning, Jing Yan 👋</Text>
+            <Text style={styles.greeting}>
+              Good morning, {displayName} 👋
+            </Text>
             <Text style={styles.subtitle}>Stay prepared. Stay safe.</Text>
             <Text style={styles.location}>📍 Singapore</Text>
           </View>
@@ -24,7 +28,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Alert Card */}
         <View style={styles.alertCard}>
           <Text style={styles.alertIcon}>⚠️</Text>
 
@@ -38,7 +41,6 @@ export default function DashboardScreen() {
           <Text style={styles.riskText}>High Risk</Text>
         </View>
 
-        {/* Preparedness */}
         <View style={styles.preparedCard}>
           <View style={styles.circle}>
             <Text style={styles.circleText}>65%</Text>
@@ -61,7 +63,6 @@ export default function DashboardScreen() {
           <Text style={styles.level}>Level 3</Text>
         </View>
 
-        {/* Tasks + Map */}
         <View style={styles.row}>
           <View style={styles.smallCard}>
             <Text style={styles.sectionTitle}>Today's Priority Tasks</Text>
@@ -75,13 +76,12 @@ export default function DashboardScreen() {
             <Text style={styles.sectionTitle}>Nearby & Map</Text>
 
             <View style={styles.mapBox}>
-              <Text>🗺️</Text>
-              <Text>2 Shelters · 1 Hospital</Text>
+              <Text style={styles.mapIcon}>🗺️</Text>
+              <Text style={styles.mapText}>2 Shelters · 1 Hospital</Text>
             </View>
           </View>
         </View>
 
-        {/* Resource Hub */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Resource Hub</Text>
 
@@ -93,7 +93,6 @@ export default function DashboardScreen() {
           </View>
         </View>
 
-        {/* Recent Activity */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Recent Activity</Text>
 
@@ -106,22 +105,14 @@ export default function DashboardScreen() {
   );
 }
 
-function Task({
-  title,
-  xp,
-}: {
-  title: string;
-  xp: string;
-}) {
+function Task({ title, xp }: { title: string; xp: string }) {
   return (
     <View style={styles.taskRow}>
       <Text style={styles.taskIcon}>✅</Text>
 
       <View style={{ flex: 1 }}>
         <Text style={styles.taskTitle}>{title}</Text>
-        <Text style={styles.taskSub}>
-          Complete this preparedness task
-        </Text>
+        <Text style={styles.taskSub}>Complete this preparedness task</Text>
       </View>
 
       <Text style={styles.xp}>{xp}</Text>
@@ -129,13 +120,7 @@ function Task({
   );
 }
 
-function Resource({
-  icon,
-  text,
-}: {
-  icon: string;
-  text: string;
-}) {
+function Resource({ icon, text }: { icon: string; text: string }) {
   return (
     <View style={styles.resourceItem}>
       <Text style={styles.resourceIcon}>{icon}</Text>
@@ -177,9 +162,10 @@ const styles = StyleSheet.create({
   },
 
   greeting: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#111827',
+    maxWidth: 250,
   },
 
   subtitle: {
@@ -271,7 +257,7 @@ const styles = StyleSheet.create({
   preparedTitle: {
     color: '#FFFFFF',
     fontWeight: 'bold',
-    fontSize: 16,
+    fontSize: 15,
   },
 
   preparedText: {
@@ -302,6 +288,7 @@ const styles = StyleSheet.create({
   level: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+    fontSize: 12,
   },
 
   row: {
@@ -329,6 +316,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontWeight: 'bold',
     marginBottom: 10,
+    color: '#111827',
   },
 
   taskRow: {
@@ -364,6 +352,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#EEF2FF',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  mapIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+
+  mapText: {
+    fontSize: 12,
+    color: '#374151',
+    textAlign: 'center',
   },
 
   resourceRow: {

@@ -3,22 +3,33 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, Pressable, Alert } from 'react-native';
 import { router } from 'expo-router';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { auth } from '../firebase/firebaseConfig';
 
 export default function RegisterScreen() {
+  const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
   async function handleRegister() {
+    if (!displayName.trim()) {
+      Alert.alert('Error', 'Please enter your display name.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match.');
       return;
     }
 
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+
+      await updateProfile(userCredential.user, {
+        displayName: displayName.trim(),
+      });
+
       router.replace('/(tabs)/dashboard' as any);
     } catch (error: any) {
       Alert.alert('Signup Failed', error.message);
@@ -36,9 +47,38 @@ export default function RegisterScreen() {
 
         <Text style={styles.title}>Create Account</Text>
 
-        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} />
-        <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-        <TextInput style={styles.input} placeholder="Confirm Password" value={confirmPassword} onChangeText={setConfirmPassword} secureTextEntry />
+        <TextInput
+          style={styles.input}
+          placeholder="Display Name"
+          value={displayName}
+          onChangeText={setDisplayName}
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry
+        />
+
+        <TextInput
+          style={styles.input}
+          placeholder="Confirm Password"
+          value={confirmPassword}
+          onChangeText={setConfirmPassword}
+          secureTextEntry
+        />
 
         <Pressable style={styles.button} onPress={handleRegister}>
           <Text style={styles.buttonText}>SIGN UP</Text>
@@ -57,32 +97,32 @@ const styles = StyleSheet.create({
   topSection: { flex: 1 },
 
   card: {
-    flex: 1.6,
+    flex: 1.75,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     alignItems: 'center',
     paddingHorizontal: 28,
-    paddingTop: 36,
+    paddingTop: 32,
   },
 
   logoCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     backgroundColor: '#F8F7FF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 14,
   },
 
-  logo: { fontSize: 32 },
+  logo: { fontSize: 30 },
 
   title: {
     fontSize: 25,
     fontWeight: 'bold',
     color: '#2D1B69',
-    marginBottom: 26,
+    marginBottom: 22,
   },
 
   input: {
