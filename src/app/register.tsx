@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { StyleSheet, Text, View, TextInput, Pressable, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { auth } from '../firebase/firebaseConfig';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase/firebaseConfig';
 
 export default function RegisterScreen() {
   const [displayName, setDisplayName] = useState('');
@@ -18,18 +19,42 @@ export default function RegisterScreen() {
       return;
     }
 
+    if (!email.trim()) {
+      Alert.alert('Error', 'Please enter your email.');
+      return;
+    }
+
+    if (password.length < 6) {
+      Alert.alert('Error', 'Password must be at least 6 characters.');
+      return;
+    }
+
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match.');
       return;
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
 
       await updateProfile(userCredential.user, {
         displayName: displayName.trim(),
       });
 
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        displayName: displayName.trim(),
+        email: email.trim(),
+        xp: 0,
+        preparedness: 0,
+        level: 1,
+        completedTasks: [],
+        createdAt: new Date(),
+      });
+      
       router.replace('/(tabs)/dashboard' as any);
     } catch (error: any) {
       Alert.alert('Signup Failed', error.message);
@@ -85,7 +110,9 @@ export default function RegisterScreen() {
         </Pressable>
 
         <Pressable onPress={() => router.push('/login' as any)}>
-          <Text style={styles.linkText}>ALREADY HAVE AN ACCOUNT? LOG IN</Text>
+          <Text style={styles.linkText}>
+            ALREADY HAVE AN ACCOUNT? LOG IN
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -93,8 +120,14 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#8B5CF6' },
-  topSection: { flex: 1 },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#8B5CF6' 
+  },
+
+  topSection: { 
+    flex: 1 
+  },
 
   card: {
     flex: 1.75,
@@ -116,7 +149,9 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
 
-  logo: { fontSize: 30 },
+  logo: { 
+    fontSize: 30 
+  },
 
   title: {
     fontSize: 25,
