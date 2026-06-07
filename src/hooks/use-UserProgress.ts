@@ -11,13 +11,21 @@ type UserProgress = {
   completedTasks: string[];
 };
 
+function calculateLevel(xp: number) {
+  if (xp >= 1000) return 5;
+  if (xp >= 500) return 4;
+  if (xp >= 250) return 3;
+  if (xp >= 100) return 2;
+  return 1;
+}
+
 export function useUserProgress() {
   const [userData, setUserData] = useState<UserProgress>({
     displayName: 'User',
     email: '',
-    xp: 650,
-    preparedness: 65,
-    level: 3,
+    xp: 0,
+    preparedness: 0,
+    level: 1,
     completedTasks: [],
   });
 
@@ -62,9 +70,17 @@ export function useUserProgress() {
 
       if (completedTasks.includes(taskName)) return;
 
+      const currentXp = data.xp || 0;
+      const currentPreparedness = data.preparedness || 0;
+
+      const newXp = currentXp + reward;
+      const newPreparedness = Math.min(currentPreparedness + 5, 100);
+      const newLevel = calculateLevel(newXp);
+
       transaction.update(userRef, {
-        xp: (data.xp || 0) + reward,
-        preparedness: Math.min((data.preparedness || 0) + 5, 100),
+        xp: newXp,
+        preparedness: newPreparedness,
+        level: newLevel,
         completedTasks: [...completedTasks, taskName],
       });
     });

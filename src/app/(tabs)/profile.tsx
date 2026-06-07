@@ -5,8 +5,36 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../../firebase/firebaseConfig';
 import { useUserProgress } from '../../hooks/use-UserProgress';
 
+function getCurrentLevelXp(level: number) {
+  if (level === 1) return 0;
+  if (level === 2) return 100;
+  if (level === 3) return 250;
+  if (level === 4) return 500;
+  return 1000;
+}
+
+function getNextLevelXp(level: number) {
+  if (level === 1) return 100;
+  if (level === 2) return 250;
+  if (level === 3) return 500;
+  if (level === 4) return 1000;
+  return 1000;
+}
+
+function getLevelProgress(xp: number, level: number) {
+  const currentLevelXp = getCurrentLevelXp(level);
+  const nextLevelXp = getNextLevelXp(level);
+
+  const progress =
+    ((xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100;
+
+  return Math.min(Math.max(progress, 0), 100);
+}
+
 export default function ProfileScreen() {
   const { userData } = useUserProgress();
+  const nextLevelXp = getNextLevelXp(userData.level);
+  const levelProgress = getLevelProgress(userData.xp, userData.level);
 
   async function handleLogout() {
     try {
@@ -57,10 +85,12 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${userData.preparedness}%` }]} />
+            <View style={[styles.progressFill, { width: `${levelProgress}%` }]} />
           </View>
 
-          <Text style={styles.progressText}>{userData.xp} / 1000 XP</Text>
+          <Text style={styles.progressText}>
+            {userData.xp} / {nextLevelXp} XP
+          </Text>
         </View>
 
         <View style={styles.card}>
