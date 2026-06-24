@@ -18,7 +18,12 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.tanjingyan.alertaready"
+      "package": "com.tanjingyan.alertaready",
+        "config": {
+    "googleMaps": {
+      "apiKey": "AIzaSyCZLFuh6Uky_bENTsxpbhPVuK8blhJX3cY"
+    }
+  }
     },
     "web": {
       "output": "static",

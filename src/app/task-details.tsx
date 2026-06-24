@@ -47,15 +47,18 @@ export default function TaskDetailsScreen() {
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
 
   const isCompleted = userData.completedTasks.includes(task.title);
-  const checklistDone = checkedItems.length === task.checklist.length;
 
-  const quizAnswered = selectedAnswers.length === task.quiz.length;
+  const checklistDone =
+    isCompleted || checkedItems.length === task.checklist.length;
 
-  const quizPassed =
-    quizAnswered &&
-    task.quiz.every(
-      (q: any, index: number) => selectedAnswers[index] === q.answer
-    );
+  const quizAnswered =
+    selectedAnswers.filter(Boolean).length === task.quiz.length;
+
+  const correctAnswers = task.quiz.filter(
+    (q: any, index: number) => selectedAnswers[index] === q.answer
+  ).length;
+
+  const quizPassed = quizAnswered && correctAnswers === task.quiz.length;
 
   function toggleChecklistItem(item: string) {
     if (isCompleted) return;
@@ -79,12 +82,12 @@ export default function TaskDetailsScreen() {
     if (isCompleted) return;
 
     if (!checklistDone) {
-      Alert.alert('Checklist incomplete', 'Please tick all checklist items first.');
+      Alert.alert('Checklist incomplete', 'Complete all checklist items first.');
       return;
     }
 
     if (!quizPassed) {
-      Alert.alert('Quiz not passed', 'Please answer all quiz questions correctly.');
+      Alert.alert('Quiz not passed', 'Answer all quiz questions correctly to claim XP.');
       return;
     }
 
@@ -125,7 +128,7 @@ export default function TaskDetailsScreen() {
             Checklist Progress: {isCompleted ? task.checklist.length : checkedItems.length} / {task.checklist.length}
           </Text>
 
-          {!checklistDone && !isCompleted ? (
+          {!checklistDone ? (
             <View style={styles.lockedQuiz}>
               <Text style={styles.lockedTitle}>Quiz Locked 🔒</Text>
               <Text style={styles.lockedText}>
@@ -136,6 +139,10 @@ export default function TaskDetailsScreen() {
             <>
               <Text style={styles.sectionTitle}>Quiz</Text>
 
+              <Text style={styles.quizScore}>
+                Quiz Score: {correctAnswers} / {task.quiz.length} correct
+              </Text>
+
               {task.quiz.map((q: any, questionIndex: number) => (
                 <View key={questionIndex} style={styles.questionBox}>
                   <Text style={styles.question}>
@@ -144,23 +151,25 @@ export default function TaskDetailsScreen() {
 
                   {q.options.map((option: string) => {
                     const selected = selectedAnswers[questionIndex] === option;
-                    const correctAnswer = q.answer === option;
+                    const hasAnswered = selectedAnswers[questionIndex] !== undefined;
+                    const isCorrect = option === q.answer;
+                    const isWrongSelected = selected && !isCorrect;
 
                     return (
                       <Pressable
                         key={option}
                         style={[
                           styles.option,
-                          selected && styles.selectedOption,
-                          isCompleted && correctAnswer && styles.correctOption,
+                          hasAnswered && isCorrect && styles.correctOption,
+                          isWrongSelected && styles.wrongOption,
                         ]}
                         onPress={() => selectAnswer(questionIndex, option)}
                       >
                         <Text
                           style={[
                             styles.optionText,
-                            selected && styles.selectedOptionText,
-                            isCompleted && correctAnswer && styles.selectedOptionText,
+                            ((hasAnswered && isCorrect) || isWrongSelected) &&
+                              styles.selectedOptionText,
                           ]}
                         >
                           {option}
@@ -168,6 +177,21 @@ export default function TaskDetailsScreen() {
                       </Pressable>
                     );
                   })}
+
+                  {selectedAnswers[questionIndex] !== undefined && (
+                    <Text
+                      style={[
+                        styles.feedbackText,
+                        selectedAnswers[questionIndex] === q.answer
+                          ? styles.correctText
+                          : styles.wrongText,
+                      ]}
+                    >
+                      {selectedAnswers[questionIndex] === q.answer
+                        ? 'Correct ✓'
+                        : `Incorrect. Correct answer: ${q.answer}`}
+                    </Text>
+                  )}
                 </View>
               ))}
             </>
@@ -187,7 +211,7 @@ export default function TaskDetailsScreen() {
 
           {!isCompleted && (
             <Text style={styles.note}>
-              Complete the checklist and pass the quiz to claim XP.
+              Complete the checklist and answer all quiz questions correctly to claim XP.
             </Text>
           )}
         </View>
@@ -293,6 +317,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  quizScore: {
+    color: '#10B981',
+    fontWeight: 'bold',
+    marginBottom: 12,
+  },
+
   questionBox: {
     backgroundColor: '#F9FAFB',
     borderRadius: 12,
@@ -315,14 +345,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
 
-  selectedOption: {
+  correctOption: {
     backgroundColor: '#10B981',
     borderColor: '#10B981',
   },
 
-  correctOption: {
-    backgroundColor: '#10B981',
-    borderColor: '#10B981',
+  wrongOption: {
+    backgroundColor: '#EF4444',
+    borderColor: '#EF4444',
   },
 
   optionText: {
@@ -332,6 +362,20 @@ const styles = StyleSheet.create({
 
   selectedOptionText: {
     color: '#FFFFFF',
+  },
+
+  feedbackText: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+
+  correctText: {
+    color: '#10B981',
+  },
+
+  wrongText: {
+    color: '#EF4444',
   },
 
   button: {

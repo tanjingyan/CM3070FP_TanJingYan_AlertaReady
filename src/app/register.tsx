@@ -1,7 +1,17 @@
 // Create account screen
 
 import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, Pressable, Alert } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  Pressable,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
@@ -54,7 +64,7 @@ export default function RegisterScreen() {
         completedTasks: [],
         createdAt: new Date(),
       });
-      
+
       router.replace('/(tabs)/dashboard' as any);
     } catch (error: any) {
       Alert.alert('Signup Failed', error.message);
@@ -62,102 +72,114 @@ export default function RegisterScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topSection} />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.topSection} />
 
-      <View style={styles.card}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logo}>🛡️</Text>
+        <View style={styles.card}>
+          <View style={styles.logoCircle}>
+            <Text style={styles.logo}>🛡️</Text>
+          </View>
+
+          <Text style={styles.title}>Create Account</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Display Name"
+            value={displayName}
+            onChangeText={setDisplayName}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Confirm Password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+          />
+
+          <Pressable style={styles.button} onPress={handleRegister}>
+            <Text style={styles.buttonText}>SIGN UP</Text>
+          </Pressable>
+
+          <Pressable onPress={() => router.push('/login' as any)}>
+            <Text style={styles.linkText}>
+              ALREADY HAVE AN ACCOUNT? LOG IN
+            </Text>
+          </Pressable>
         </View>
-
-        <Text style={styles.title}>Create Account</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Display Name"
-          value={displayName}
-          onChangeText={setDisplayName}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Confirm Password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry
-        />
-
-        <Pressable style={styles.button} onPress={handleRegister}>
-          <Text style={styles.buttonText}>SIGN UP</Text>
-        </Pressable>
-
-        <Pressable onPress={() => router.push('/login' as any)}>
-          <Text style={styles.linkText}>
-            ALREADY HAVE AN ACCOUNT? LOG IN
-          </Text>
-        </Pressable>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#8B5CF6' 
+  container: {
+    flex: 1,
+    backgroundColor: '#8B5CF6',
   },
 
-  topSection: { 
-    flex: 1 
+  scrollContent: {
+    flexGrow: 1,
+  },
+
+  topSection: {
+    flex: 0.35,
   },
 
   card: {
-    flex: 1.75,
+    flex: 2.2,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     alignItems: 'center',
     paddingHorizontal: 28,
-    paddingTop: 32,
+    paddingTop: 18,
   },
 
   logoCircle: {
-    width: 66,
-    height: 66,
-    borderRadius: 33,
+    width: 62,
+    height: 62,
+    borderRadius: 31,
     backgroundColor: '#F8F7FF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 14,
+    marginBottom: 12,
   },
 
-  logo: { 
-    fontSize: 30 
+  logo: {
+    fontSize: 28,
   },
 
   title: {
     fontSize: 25,
     fontWeight: 'bold',
     color: '#2D1B69',
-    marginBottom: 22,
+    marginBottom: 18,
   },
 
   input: {
@@ -165,7 +187,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F3F4F6',
     borderRadius: 6,
     padding: 12,
-    marginBottom: 12,
+    marginBottom: 10,
     fontSize: 14,
   },
 
@@ -175,8 +197,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
-    marginTop: 10,
-    marginBottom: 18,
+    marginTop: 8,
+    marginBottom: 16,
   },
 
   buttonText: {

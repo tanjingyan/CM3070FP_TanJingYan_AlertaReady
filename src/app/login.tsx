@@ -1,7 +1,17 @@
 // Login screen
 
 import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, Pressable, Alert } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TextInput,
+  Pressable,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+} from 'react-native';
 import { router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/firebaseConfig';
@@ -12,72 +22,107 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.replace('/dashboard' as any);
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      router.replace('/(tabs)/dashboard' as any);
     } catch (error: any) {
       Alert.alert('Login Failed', error.message);
     }
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.topSection} />
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.topSection} />
 
-      <View style={styles.card}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logo}>🛡️</Text>
+        <View style={styles.card}>
+          <View style={styles.logoCircle}>
+            <Text style={styles.logo}>🛡️</Text>
+          </View>
+
+          <Text style={styles.title}>Login</Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+
+          <Text style={styles.forgotText}>FORGOT YOUR PASSWORD?</Text>
+
+          <Pressable style={styles.button} onPress={handleLogin}>
+            <Text style={styles.buttonText}>LOGIN</Text>
+          </Pressable>
+
+          <Pressable onPress={() => router.push('/register' as any)}>
+            <Text style={styles.linkText}>CREATE NEW ACCOUNT?</Text>
+          </Pressable>
         </View>
-
-        <Text style={styles.title}>Login</Text>
-
-        <TextInput style={styles.input} placeholder="Email" value={email} onChangeText={setEmail} />
-        <TextInput style={styles.input} placeholder="Password" value={password} onChangeText={setPassword} secureTextEntry />
-
-        <Text style={styles.forgotText}>FORGOT YOUR PASSWORD?</Text>
-
-        <Pressable style={styles.button} onPress={handleLogin}>
-          <Text style={styles.buttonText}>LOGIN</Text>
-        </Pressable>
-
-        <Pressable onPress={() => router.push('/register' as any)}>
-          <Text style={styles.linkText}>CREATE NEW ACCOUNT?</Text>
-        </Pressable>
-      </View>
-    </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#8B5CF6' },
-  topSection: { flex: 1 },
+  container: {
+    flex: 1,
+    backgroundColor: '#8B5CF6',
+  },
+
+  scrollContent: {
+    flexGrow: 1,
+  },
+
+  topSection: {
+    flex: 0.45,
+  },
 
   card: {
-    flex: 1.5,
+    flex: 2,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     alignItems: 'center',
     paddingHorizontal: 28,
-    paddingTop: 36,
+    paddingTop: 20,
   },
 
   logoCircle: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     backgroundColor: '#F8F7FF',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 14,
   },
 
-  logo: { fontSize: 32 },
+  logo: {
+    fontSize: 30,
+  },
 
   title: {
     fontSize: 26,
     fontWeight: 'bold',
     color: '#2D1B69',
-    marginBottom: 28,
+    marginBottom: 24,
   },
 
   input: {
