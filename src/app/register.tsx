@@ -15,6 +15,7 @@ import {
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
 import { auth, db } from '../firebase/firebaseConfig';
 
 export default function RegisterScreen() {
@@ -22,6 +23,8 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   async function handleRegister() {
     if (!displayName.trim()) {
@@ -92,6 +95,7 @@ export default function RegisterScreen() {
           <TextInput
             style={styles.input}
             placeholder="Display Name"
+            placeholderTextColor="#9CA3AF"
             value={displayName}
             onChangeText={setDisplayName}
           />
@@ -99,6 +103,7 @@ export default function RegisterScreen() {
           <TextInput
             style={styles.input}
             placeholder="Email"
+            placeholderTextColor="#9CA3AF"
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -106,21 +111,43 @@ export default function RegisterScreen() {
             autoCorrect={false}
           />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Password"
+              placeholderTextColor="#9CA3AF"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+            />
 
-          <TextInput
-            style={styles.input}
-            placeholder="Confirm Password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-          />
+            <Pressable onPress={() => setShowPassword(!showPassword)}>
+              <Ionicons
+                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={22}
+                color="#6B7280"
+              />
+            </Pressable>
+          </View>
+
+          <View style={styles.passwordContainer}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Confirm Password"
+              placeholderTextColor="#9CA3AF"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry={!showConfirmPassword}
+            />
+
+            <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
+              <Ionicons
+                name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
+                size={22}
+                color="#6B7280"
+              />
+            </Pressable>
+          </View>
 
           <Pressable style={styles.button} onPress={handleRegister}>
             <Text style={styles.buttonText}>SIGN UP</Text>
@@ -189,6 +216,24 @@ const styles = StyleSheet.create({
     padding: 12,
     marginBottom: 10,
     fontSize: 14,
+    color: '#111827',
+  },
+
+  passwordContainer: {
+    width: '100%',
+    backgroundColor: '#F3F4F6',
+    borderRadius: 6,
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 12,
+  },
+
+  passwordInput: {
+    flex: 1,
+    padding: 12,
+    fontSize: 14,
+    color: '#111827',
   },
 
   button: {

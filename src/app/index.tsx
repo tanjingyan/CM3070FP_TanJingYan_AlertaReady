@@ -1,6 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../firebase/firebaseConfig';
 
 export default function SplashScreen() {
   const progress = useRef(new Animated.Value(0)).current;
@@ -13,7 +15,15 @@ export default function SplashScreen() {
     }).start();
 
     const timer = setTimeout(() => {
-      router.replace('/auth' as any);
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        unsubscribe();
+
+        if (user) {
+          router.replace('/(tabs)/dashboard' as any);
+        } else {
+          router.replace('/auth' as any);
+        }
+      });
     }, 2500);
 
     return () => clearTimeout(timer);

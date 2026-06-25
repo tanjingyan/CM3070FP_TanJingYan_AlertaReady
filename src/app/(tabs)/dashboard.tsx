@@ -209,10 +209,29 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.resourceRow}>
-            <Resource icon="➕" text="First Aid" />
-            <Resource icon="📞" text="Contacts" />
-            <Resource icon="📘" text="Evacuation" />
-            <Resource icon="📄" text="Documents" />
+            <Resource
+              icon="➕"
+              text="First Aid"
+              route="/first-aid"
+            />
+
+            <Resource
+              icon="📞"
+              text="Contacts"
+              route="/contacts"
+            />
+
+            <Resource
+              icon="📘"
+              text="Evacuation"
+              route="/evacuation"
+            />
+
+            <Resource
+              icon="📄"
+              text="Documents"
+              route="/documents"
+            />
           </View>
         </View>
 
@@ -246,14 +265,15 @@ function Task({ title, xp, completed }: { title: string; xp: string; completed?:
   );
 }
 
-function Resource({ icon, text }: { icon: string; text: string }) {
+function Resource({icon, text, route }: { icon: string; text: string; route: string }) {
   return (
-    <View style={styles.resourceItem}>
-      <View style={styles.resourceIconBox}>
-        <Text style={styles.resourceIcon}>{icon}</Text>
-      </View>
+    <Pressable
+      style={styles.resourceItem}
+      onPress={() => router.push(route as any)}
+    >
+      <Text style={styles.resourceIcon}>{icon}</Text>
       <Text style={styles.resourceText}>{text}</Text>
-    </View>
+    </Pressable>
   );
 }
 
