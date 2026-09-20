@@ -19,11 +19,11 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.tanjingyan.alertaready",
-        "config": {
-    "googleMaps": {
-      "apiKey": "AIzaSyCZLFuh6Uky_bENTsxpbhPVuK8blhJX3cY"
-    }
-  }
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyCZLFuh6Uky_bENTsxpbhPVuK8blhJX3cY"
+        }
+      }
     },
     "web": {
       "output": "static",
@@ -40,7 +40,9 @@
             "imageWidth": 76
           }
         }
-      ]
+      ],
+      "expo-image",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

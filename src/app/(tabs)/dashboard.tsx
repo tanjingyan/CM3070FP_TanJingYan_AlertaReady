@@ -3,6 +3,9 @@ import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { useUserProgress } from '../../hooks/use-UserProgress';
 import MapView, { Marker, Circle } from 'react-native-maps';
+import * as Location from 'expo-location';
+import { useEffect, useState } from 'react';
+import { TOMORROW_API_KEY } from '../../constants/api';
 
 function getCurrentLevelXp(level: number) {
   if (level === 1) return 0;
@@ -28,10 +31,94 @@ function getLevelProgress(xp: number, level: number) {
   return Math.min(Math.max(progress, 0), 100);
 }
 
+function getWeatherDescription(code: number) {
+  switch (code) {
+    case 1000:
+      return 'Clear';
+    case 1100:
+      return 'Mostly Clear';
+    case 1101:
+      return 'Partly Cloudy';
+    case 1001:
+      return 'Cloudy';
+    case 4000:
+      return 'Drizzle';
+    case 4200:
+      return 'Light Rain';
+    case 4201:
+      return 'Heavy Rain';
+    case 5000:
+      return 'Snow';
+    case 8000:
+      return 'Thunderstorm';
+    default:
+      return 'Unknown';
+  }
+}
+
 export default function DashboardScreen() {
   const { userData } = useUserProgress();
   const nextLevelXp = getNextLevelXp(userData.level);
   const levelProgress = getLevelProgress(userData.xp, userData.level);
+  const [temperature, setTemperature] = useState('--');
+  const [weatherText, setWeatherText] = useState('Loading...');
+  const [riskLevel, setRiskLevel] = useState('Low Risk');
+  
+  useEffect(() => {
+    getWeather();
+  }, []);
+
+  const getWeather = async () => {
+    try {
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        setWeatherText('Location denied');
+        return;
+      }
+
+      const location =
+        await Location.getCurrentPositionAsync({});
+
+      const latitude = location.coords.latitude;
+      const longitude = location.coords.longitude;
+
+      const response = await fetch(
+        `https://api.tomorrow.io/v4/weather/realtime?location=${latitude},${longitude}&apikey=${TOMORROW_API_KEY}`
+      );
+
+      const data = await response.json();
+
+      const temp = Math.round(
+        data.data.values.temperature
+      );
+
+      const weatherCode = data.data.values.weatherCode;
+      const rain = data.data.values.rainIntensity ?? 0;
+
+      setTemperature(`${temp}°C`);
+
+      setWeatherText(getWeatherDescription(weatherCode));
+
+      if (weatherCode === 4201 || rain > 10) {
+        setRiskLevel('High Risk');
+      }
+      else if (
+        weatherCode === 4200 ||
+        weatherCode === 4000 ||
+        rain > 0
+      ) {
+        setRiskLevel('Moderate Risk');
+      }
+      else {
+        setRiskLevel('Low Risk');
+      }
+    } catch (error) {
+      console.log(error);
+      setWeatherText('Unavailable');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -44,19 +131,39 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.weatherBox}>
-            <Text style={styles.weatherIcon}>🌧️</Text>
-            <Text style={styles.temp}>28°C</Text>
-            <Text style={styles.weatherText}>Light Rain</Text>
+            <Text style={styles.weatherIcon}>
+              {weatherText.includes('Rain') ? '🌧️' :
+              weatherText.includes('Cloud') ? '☁️' :
+              weatherText === 'Clear' ? '☀️' : '🌤️'}
+            </Text>
+
+            <Text style={styles.temp}>{temperature}</Text>
+
+            <Text style={styles.weatherText}>
+              {weatherText}
+            </Text>
           </View>
+
         </View>
 
         <View style={styles.alertCard}>
           <Text style={styles.alertIcon}>⚠️</Text>
 
           <View style={{ flex: 1 }}>
-            <Text style={styles.alertTitle}>Flood Risk in Your Area</Text>
+            <Text style={styles.alertTitle}>
+              {riskLevel === 'High Risk'
+                ? 'Flood Risk in Your Area'
+                : riskLevel === 'Moderate Risk'
+                ? 'Weather Advisory'
+                : 'No Immediate Risk'}
+            </Text>
+
             <Text style={styles.alertText}>
-              Heavy rainfall expected. Avoid low-lying areas near waterways.
+              {riskLevel === 'High Risk'
+                ? 'Heavy rainfall expected. Avoid low-lying areas near waterways.'
+                : riskLevel === 'Moderate Risk'
+                ? 'Light rainfall expected. Stay updated on weather conditions.'
+                : 'No severe weather conditions detected in your area.'}
             </Text>
 
             <View style={styles.alertButtonRow}>
@@ -70,7 +177,21 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          <Text style={styles.riskText}>High Risk</Text>
+          <Text
+            style={[
+              styles.riskText,
+              {
+                color:
+                  riskLevel === 'High Risk'
+                    ? '#DC2626'
+                    : riskLevel === 'Moderate Risk'
+                    ? '#F59E0B'
+                    : '#16A34A',
+              },
+            ]}
+          >
+            {riskLevel}
+          </Text>
         </View>
 
         <View style={styles.preparedCard}>
@@ -191,9 +312,20 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.riskInfoCard}>
-            <Text style={styles.riskInfoTitle}>⚠️ Flood Risk Area</Text>
+            <Text style={styles.riskInfoTitle}>
+              {riskLevel === 'High Risk'
+                ? '⚠️ Flood Risk Area'
+                : riskLevel === 'Moderate Risk'
+                ? '🌧️ Weather Advisory'
+                : '✅ Conditions Normal'}
+            </Text>
+
             <Text style={styles.riskInfoText}>
-              Heavy rainfall expected near your current location.
+              {riskLevel === 'High Risk'
+                ? 'Heavy rainfall expected near your current location.'
+                : riskLevel === 'Moderate Risk'
+                ? 'Light rainfall expected near your current location.'
+                : 'No immediate weather threats detected.'}
             </Text>
           </View>
 
@@ -248,6 +380,7 @@ export default function DashboardScreen() {
       </ScrollView>
     </SafeAreaView>
   );
+  
 }
 
 function Task({ title, xp, completed }: { title: string; xp: string; completed?: boolean }) {
