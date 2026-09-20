@@ -42,4 +42,4 @@ example
 /ios
 /android
 
-constants/api.ts
+src/constants/api.ts
