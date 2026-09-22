@@ -47,17 +47,17 @@ export default function MapScreen() {
   const [mapFilters, setMapFilters] = useState({
     shelters: true,
     hospitals: true,
-    earthquakes: true,
+    earthquakes: false,
     wildfires: true,
     severeStorms: true,
-    volcanoes: true,
-    floods: true,
-    landslides: true,
-    dustHaze: true,
-    drought: true,
-    ice: true,
-    otherNatural: true,
-    weather: true,
+    volcanoes: false,
+    floods: false,
+    landslides: false,
+    dustHaze: false,
+    drought: false,
+    ice: false,
+    otherNatural: false,
+    weather: false,
   });
 
   // Filter-sheet UI state.
@@ -103,17 +103,17 @@ export default function MapScreen() {
     setPendingFilters({
       shelters: true,
       hospitals: true,
-      earthquakes: true,
+      earthquakes: false,
       wildfires: true,
       severeStorms: true,
-      volcanoes: true,
-      floods: true,
-      landslides: true,
-      dustHaze: true,
-      drought: true,
-      ice: true,
-      otherNatural: true,
-      weather: true,
+      volcanoes: false,
+      floods: false,
+      landslides: false,
+      dustHaze: false,
+      drought: false,
+      ice: false,
+      otherNatural: false,
+      weather: false,
     });
   }
 
@@ -192,6 +192,144 @@ export default function MapScreen() {
         return '🧊';
       default:
         return '⚠️';
+    }
+  }
+
+  function getHazardFilterPalette(filter: MapFilter) {
+    switch (filter) {
+      case 'wildfires':
+        return {
+          background: '#FDE2E2',
+          border: '#F7CACA',
+          text: '#B42318',
+          badge: '#F9BFC1',
+        };
+      case 'severeStorms':
+        return {
+          background: '#FDE7B2',
+          border: '#F2D28B',
+          text: '#9A6700',
+          badge: '#F5CD78',
+        };
+      case 'volcanoes':
+        return {
+          background: '#F3F4F6',
+          border: '#D1D5DB',
+          text: '#4B5563',
+          badge: '#E5E7EB',
+        };
+      case 'floods':
+        return {
+          background: '#E0F2FE',
+          border: '#BAE6FD',
+          text: '#0369A1',
+          badge: '#BAE6FD',
+        };
+      case 'earthquakes':
+        return {
+          background: '#F3E8FF',
+          border: '#E9D5FF',
+          text: '#7E22CE',
+          badge: '#E9D5FF',
+        };
+      case 'weather':
+        return {
+          background: '#E0F2FE',
+          border: '#BAE6FD',
+          text: '#0369A1',
+          badge: '#BAE6FD',
+        };
+      case 'landslides':
+        return {
+          background: '#FEF3C7',
+          border: '#FDE68A',
+          text: '#92400E',
+          badge: '#FDE68A',
+        };
+      case 'dustHaze':
+        return {
+          background: '#F5F5F4',
+          border: '#D6D3D1',
+          text: '#57534E',
+          badge: '#E7E5E4',
+        };
+      case 'drought':
+        return {
+          background: '#FEF3C7',
+          border: '#FDE68A',
+          text: '#A16207',
+          badge: '#FDE68A',
+        };
+      case 'ice':
+        return {
+          background: '#ECFEFF',
+          border: '#A5F3FC',
+          text: '#0E7490',
+          badge: '#CFFAFE',
+        };
+      default:
+        return {
+          background: '#F3F4F6',
+          border: '#E5E7EB',
+          text: '#4B5563',
+          badge: '#E5E7EB',
+        };
+    }
+  }
+
+  function getHazardFilterPluralLabel(filter: MapFilter) {
+    switch (filter) {
+      case 'wildfires':
+        return 'Wildfires';
+      case 'severeStorms':
+        return 'Storms';
+      case 'volcanoes':
+        return 'Volcanoes';
+      case 'floods':
+        return 'Floods';
+      case 'earthquakes':
+        return 'Earthquakes';
+      case 'weather':
+        return 'Weather';
+      case 'landslides':
+        return 'Landslides';
+      case 'dustHaze':
+        return 'Dust / Haze';
+      case 'drought':
+        return 'Drought';
+      case 'ice':
+        return 'Ice';
+      case 'otherNatural':
+        return 'Other events';
+      default:
+        return 'Hazards';
+    }
+  }
+
+  function getHazardFilterEmptyLabel(filter: MapFilter) {
+    switch (filter) {
+      case 'wildfires':
+        return 'wildfires';
+      case 'severeStorms':
+        return 'storms';
+      case 'volcanoes':
+        return 'volcanoes';
+      case 'floods':
+        return 'floods';
+      case 'earthquakes':
+        return 'earthquakes';
+      case 'weather':
+        return 'hazardous weather';
+      case 'landslides':
+        return 'landslides';
+      case 'dustHaze':
+        return 'dust or haze events';
+      case 'drought':
+        return 'drought events';
+      case 'ice':
+        return 'ice events';
+      default:
+        return 'natural events';
     }
   }
 
@@ -284,6 +422,22 @@ export default function MapScreen() {
     { key: 'shelters', label: 'Shelters', icon: '🏠', count: shelters.length },
     { key: 'hospitals', label: 'Hospitals', icon: '🏥', count: hospitals.length },
   ];
+
+  const hazardFilterOptions =
+    filterOptions.filter(
+      (option) =>
+        option.key !== 'shelters' &&
+        option.key !== 'hospitals'
+    );
+
+  const activeHazardFilterOptions =
+    hazardFilterOptions.filter(
+      (option) => mapFilters[option.key]
+    );
+
+  // All active hazard filters are shown in horizontal swipeable rows.
+  const visibleHazardFilterOptions =
+    activeHazardFilterOptions;
 
   useEffect(() => {
     getUserLocation();
@@ -436,6 +590,81 @@ export default function MapScreen() {
 
     validEvents.sort((a, b) => a!.distanceKm - b!.distanceKm);
     return validEvents[0];
+  }
+
+  function getNearestEonetEventForFilter(filter: MapFilter) {
+    if (!location || disasterEvents.length === 0) {
+      return null;
+    }
+
+    const matchingEvents = disasterEvents
+      .map((event) => {
+        if (!event.geometry || event.geometry.length === 0) {
+          return null;
+        }
+
+        const geometry =
+          event.geometry[event.geometry.length - 1];
+
+        if (geometry.type !== 'Point') {
+          return null;
+        }
+
+        const coordinates = geometry.coordinates;
+
+        if (
+          !Array.isArray(coordinates) ||
+          coordinates.length < 2
+        ) {
+          return null;
+        }
+
+        const longitude = coordinates[0];
+        const latitude = coordinates[1];
+
+        if (
+          typeof latitude !== 'number' ||
+          typeof longitude !== 'number'
+        ) {
+          return null;
+        }
+
+        const category =
+          event.categories?.[0]?.title ??
+          'Natural Event';
+
+        if (getEonetFilterKey(category) !== filter) {
+          return null;
+        }
+
+        const distanceKm =
+          getDistanceInMeters(
+            location.latitude,
+            location.longitude,
+            latitude,
+            longitude
+          ) / 1000;
+
+        return {
+          id: event.id,
+          title: event.title ?? 'Natural Event',
+          category,
+          latitude,
+          longitude,
+          distanceKm,
+        };
+      })
+      .filter((event) => event !== null);
+
+    if (matchingEvents.length === 0) {
+      return null;
+    }
+
+    matchingEvents.sort(
+      (a, b) => a!.distanceKm - b!.distanceKm
+    );
+
+    return matchingEvents[0];
   }
 
   // ---------------------------------------------------------
@@ -873,25 +1102,45 @@ export default function MapScreen() {
 
   const hasWeatherHazard = riskLevel === 'High Risk';
 
-  const activeHazard = nearbyEonetHazard
+  const filteredNearbyEonetHazard =
+    nearbyEonetHazard &&
+    mapFilters[
+      getEonetFilterKey(
+        nearbyEonetHazard.category
+      )
+    ]
+      ? nearbyEonetHazard
+      : null;
+
+  const filteredNearbyEarthquakeHazard =
+    nearbyEarthquakeHazard &&
+    mapFilters.earthquakes
+      ? nearbyEarthquakeHazard
+      : null;
+
+  const filteredWeatherHazard =
+    hasWeatherHazard &&
+    mapFilters.weather;
+
+  const activeHazard = filteredNearbyEonetHazard
     ? {
         type: 'Natural Event',
-        title: nearbyEonetHazard.title,
-        detail: `${nearbyEonetHazard.category} detected ${nearbyEonetHazard.distanceKm.toFixed(0)} km away`,
-        latitude: nearbyEonetHazard.latitude,
-        longitude: nearbyEonetHazard.longitude,
+        title: filteredNearbyEonetHazard.title,
+        detail: `${filteredNearbyEonetHazard.category} detected ${filteredNearbyEonetHazard.distanceKm.toFixed(0)} km away`,
+        latitude: filteredNearbyEonetHazard.latitude,
+        longitude: filteredNearbyEonetHazard.longitude,
         source: 'NASA EONET',
       }
-    : nearbyEarthquakeHazard
+    : filteredNearbyEarthquakeHazard
       ? {
           type: 'Earthquake',
-          title: `M${nearbyEarthquakeHazard.magnitude} Earthquake`,
-          detail: `${nearbyEarthquakeHazard.place} • ${nearbyEarthquakeHazard.distanceKm.toFixed(0)} km away`,
-          latitude: nearbyEarthquakeHazard.latitude,
-          longitude: nearbyEarthquakeHazard.longitude,
+          title: `M${filteredNearbyEarthquakeHazard.magnitude} Earthquake`,
+          detail: `${filteredNearbyEarthquakeHazard.place} • ${filteredNearbyEarthquakeHazard.distanceKm.toFixed(0)} km away`,
+          latitude: filteredNearbyEarthquakeHazard.latitude,
+          longitude: filteredNearbyEarthquakeHazard.longitude,
           source: 'USGS',
         }
-      : hasWeatherHazard
+      : filteredWeatherHazard
         ? {
             type: 'Severe Weather',
             title: 'Severe weather risk detected',
@@ -929,6 +1178,124 @@ export default function MapScreen() {
     })
     .filter((place) => place !== null)
     .sort((a, b) => a!.distanceKm - b!.distanceKm)[0] ?? null;
+
+  // App-defined range used only for the "Nearest" display cards.
+  // It is not an official warning or evacuation radius.
+  const MONITORED_HAZARD_RANGE_KM = 500;
+
+  const getNearestCardForFilter = (filter: MapFilter) => {
+    const option =
+      hazardFilterOptions.find(
+        (item) => item.key === filter
+      );
+
+    const palette =
+      getHazardFilterPalette(filter);
+
+    if (filter === 'earthquakes') {
+      const earthquake =
+        nearestEarthquake &&
+        nearestEarthquake.distanceKm <=
+          MONITORED_HAZARD_RANGE_KM
+          ? nearestEarthquake
+          : null;
+
+      return {
+        key: filter,
+        label:
+          option?.label ??
+          getHazardFilterPluralLabel(filter),
+        icon: option?.icon ?? '🌋',
+        count: option?.count ?? 0,
+        palette,
+        source: 'USGS',
+        available: !!earthquake,
+        title: earthquake
+          ? `M${earthquake.magnitude} earthquake`
+          : '',
+        distanceText: earthquake
+          ? `${earthquake.distanceKm.toFixed(0)} km away`
+          : '',
+      };
+    }
+
+    if (filter === 'weather') {
+      const weatherAvailable =
+        riskLevel === 'Moderate Risk' ||
+        riskLevel === 'High Risk';
+
+      return {
+        key: filter,
+        label:
+          option?.label ??
+          getHazardFilterPluralLabel(filter),
+        icon: option?.icon ?? '🌦️',
+        count: option?.count ?? riskLevel,
+        palette,
+        source: 'Tomorrow.io',
+        available: weatherAvailable,
+        title: weatherAvailable
+          ? `${riskLevel} weather`
+          : '',
+        distanceText: weatherAvailable
+          ? 'At your location'
+          : '',
+      };
+    }
+
+    const event =
+      getNearestEonetEventForFilter(filter);
+
+    const nearbyEvent =
+      event &&
+      event.distanceKm <=
+        MONITORED_HAZARD_RANGE_KM
+        ? event
+        : null;
+
+    return {
+      key: filter,
+      label:
+        option?.label ??
+        getHazardFilterPluralLabel(filter),
+      icon:
+        option?.icon ??
+        (nearbyEvent
+          ? getNaturalEventSummaryIcon(
+              nearbyEvent.category
+            )
+          : '⚠️'),
+      count: option?.count ?? 0,
+      palette,
+      source: 'NASA EONET',
+      available: !!nearbyEvent,
+      title: nearbyEvent
+        ? getNaturalEventSummaryTitle(
+            nearbyEvent.category
+          )
+        : '',
+      distanceText: nearbyEvent
+        ? `${nearbyEvent.distanceKm.toFixed(0)} km away`
+        : '',
+    };
+  };
+
+  const displayedNearestHazards =
+    visibleHazardFilterOptions.map(
+      (option) =>
+        getNearestCardForFilter(
+          option.key
+        )
+    );
+
+  const nearestHazardSectionTitle =
+    visibleHazardFilterOptions.length === 0
+      ? 'Nearest monitored hazards'
+      : visibleHazardFilterOptions.length === 1
+        ? `Nearest ${visibleHazardFilterOptions[0].label}`
+        : visibleHazardFilterOptions.length === 2
+          ? `Nearest ${visibleHazardFilterOptions[0].label} & ${visibleHazardFilterOptions[1].label}`
+          : 'Nearest selected hazards';
 
   // ---------------------------------------------------------
   // UI
@@ -1276,49 +1643,89 @@ export default function MapScreen() {
         )}
         </MapView>
 
-        {/* Compact filter bar: pinned hazards + full filter sheet. */}
+        {/* Active hazard chips can be swiped horizontally. */}
         <View style={styles.hazardTypeBar}>
-          <Pressable
-            onPress={() => toggleMapFilter('wildfires')}
-            style={[
-              styles.pinnedHazardChip,
-              styles.wildfirePinnedChip,
-              !mapFilters.wildfires && styles.pinnedHazardChipInactive,
-            ]}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.hazardChipScroll}
+            contentContainerStyle={styles.hazardChipScrollContent}
           >
-            <Text style={styles.pinnedHazardIcon}>🔥</Text>
-            <Text style={styles.wildfirePinnedText}>Wildfires</Text>
-            <View style={styles.wildfireCountBadge}>
-              <Text style={styles.wildfireCountText}>
-                {eonetCategoryCounts.wildfires}
-              </Text>
-            </View>
-          </Pressable>
+            {visibleHazardFilterOptions.length > 0 ? (
+              visibleHazardFilterOptions.map((option) => {
+                const palette =
+                  getHazardFilterPalette(option.key);
+
+                return (
+                  <Pressable
+                    key={option.key}
+                    onPress={() =>
+                      toggleMapFilter(option.key)
+                    }
+                    style={[
+                      styles.dynamicHazardChip,
+                      {
+                        backgroundColor:
+                          palette.background,
+                        borderColor:
+                          palette.border,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.dynamicHazardChipIcon}>
+                      {option.icon}
+                    </Text>
+
+                    <Text
+                      style={[
+                        styles.dynamicHazardChipText,
+                        { color: palette.text },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+
+                    <View
+                      style={[
+                        styles.dynamicHazardCountBadge,
+                        {
+                          backgroundColor:
+                            palette.badge,
+                        },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.dynamicHazardCountText,
+                          { color: palette.text },
+                        ]}
+                      >
+                        {option.count}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })
+            ) : (
+              <Pressable
+                style={styles.noHazardFiltersChip}
+                onPress={openFilterSheet}
+              >
+                <Text style={styles.noHazardFiltersText}>
+                  Select hazards
+                </Text>
+              </Pressable>
+            )}
+          </ScrollView>
 
           <Pressable
-            onPress={() => toggleMapFilter('severeStorms')}
-            style={[
-              styles.pinnedHazardChip,
-              styles.stormPinnedChip,
-              !mapFilters.severeStorms && styles.pinnedHazardChipInactive,
-            ]}
+            style={styles.filtersButton}
+            onPress={openFilterSheet}
           >
-            <Text style={styles.pinnedHazardIcon}>🌪️</Text>
-            <Text style={styles.stormPinnedText}>Storms</Text>
-            <View style={styles.stormCountBadge}>
-              <Text style={styles.stormCountText}>
-                {eonetCategoryCounts.severeStorms}
-              </Text>
-            </View>
-          </Pressable>
-
-          <Pressable style={styles.moreFilterChip} onPress={openFilterSheet}>
-            <Text style={styles.moreFilterText}>•••</Text>
-          </Pressable>
-
-          <Pressable style={styles.filtersButton} onPress={openFilterSheet}>
             <Text style={styles.filtersButtonIcon}>☷</Text>
-            <Text style={styles.filtersButtonText}>Filters</Text>
+            <Text style={styles.filtersButtonText}>
+              Filters
+            </Text>
           </Pressable>
         </View>
 
@@ -1525,73 +1932,124 @@ export default function MapScreen() {
               </View>
 
               {/* ------------------------------------------------ */}
-              {/* NEAREST MONITORED HAZARDS                        */}
+              {/* FILTER-AWARE NEAREST HAZARDS                     */}
               {/* ------------------------------------------------ */}
-              <Text style={styles.compactHazardsTitle}>
-                Nearest monitored hazards
+              <Text style={styles.filteredNearestTitle}>
+                {nearestHazardSectionTitle}
               </Text>
 
-              <View style={styles.compactHazardsRow}>
-                <View style={styles.compactHazardSummary}>
-                  <View style={styles.compactHazardHeader}>
-                    <Text style={styles.compactHazardIcon}>〰</Text>
-                    <Text style={styles.compactHazardSource}>USGS</Text>
-                  </View>
-
-                  {nearestEarthquake ? (
-                    <>
-                      <Text style={styles.compactHazardName} numberOfLines={1}>
-                        M{nearestEarthquake.magnitude} earthquake
-                      </Text>
-                      <Text style={styles.compactHazardDistance}>
-                        {nearestEarthquake.distanceKm.toFixed(0)} km away
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Text style={styles.compactHazardName}>
-                        No recent earthquake
-                      </Text>
-                      <Text style={styles.compactHazardDistance}>
-                        No data available
-                      </Text>
-                    </>
-                  )}
+              {displayedNearestHazards.length === 0 ? (
+                <View style={styles.filteredHazardEmptyCard}>
+                  <Text style={styles.filteredHazardEmptyIcon}>
+                    △
+                  </Text>
+                  <Text style={styles.filteredHazardEmptyTitle}>
+                    No hazard filters selected
+                  </Text>
+                  <Text style={styles.filteredHazardEmptySubtitle}>
+                    Choose hazards from Filters to monitor nearby events
+                  </Text>
                 </View>
-
-                <View style={styles.compactHazardSummary}>
-                  <View style={styles.compactHazardHeader}>
-                    <Text style={styles.compactHazardIcon}>
-                      {nearestEonetEvent
-                        ? getNaturalEventSummaryIcon(nearestEonetEvent.category)
-                        : '⚠️'}
-                    </Text>
-                    <Text style={styles.compactHazardSource}>NASA EONET</Text>
-                  </View>
-
-                  {nearestEonetEvent ? (
-                    <>
-                      <Text style={styles.compactHazardName} numberOfLines={1}>
-                        {getNaturalEventSummaryTitle(
-                          nearestEonetEvent.category
-                        )}
-                      </Text>
-                      <Text style={styles.compactHazardDistance}>
-                        {nearestEonetEvent.distanceKm.toFixed(0)} km away
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <Text style={styles.compactHazardName}>
-                        No current event
-                      </Text>
-                      <Text style={styles.compactHazardDistance}>
-                        No data available
-                      </Text>
-                    </>
-                  )}
+              ) : displayedNearestHazards.length === 1 &&
+                !displayedNearestHazards[0].available ? (
+                <View style={styles.filteredHazardEmptyCard}>
+                  <Text style={styles.filteredHazardEmptyIcon}>
+                    {displayedNearestHazards[0].icon}
+                  </Text>
+                  <Text style={styles.filteredHazardEmptyTitle}>
+                    No {getHazardFilterEmptyLabel(
+                      displayedNearestHazards[0].key
+                    )} detected nearby
+                  </Text>
+                  <Text style={styles.filteredHazardEmptySubtitle}>
+                    Within your monitored range
+                  </Text>
                 </View>
-              </View>
+              ) : (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={
+                    styles.filteredHazardCardsScrollContent
+                  }
+                  snapToInterval={156}
+                  decelerationRate="fast"
+                >
+                  {displayedNearestHazards.map((item) => (
+                    <View
+                      key={item.key}
+                      style={[
+                        styles.filteredHazardCard,
+                        {
+                          backgroundColor:
+                            item.available
+                              ? item.palette.background
+                              : '#FAFAFA',
+                          borderColor:
+                            item.available
+                              ? item.palette.border
+                              : '#F1F5F9',
+                        },
+                      ]}
+                    >
+                      {item.available ? (
+                        <>
+                          <View style={styles.filteredHazardCardHeader}>
+                            <Text
+                              style={[
+                                styles.filteredHazardCardSource,
+                                {
+                                  color:
+                                    item.palette.text,
+                                },
+                              ]}
+                            >
+                              {item.source}
+                            </Text>
+
+                            <Text style={styles.filteredHazardCardIcon}>
+                              {item.icon}
+                            </Text>
+                          </View>
+
+                          <Text
+                            style={styles.filteredHazardCardTitle}
+                            numberOfLines={1}
+                          >
+                            {item.title}
+                          </Text>
+
+                          <Text
+                            style={[
+                              styles.filteredHazardCardDistance,
+                              {
+                                color:
+                                  item.palette.text,
+                              },
+                            ]}
+                          >
+                            {item.distanceText}
+                          </Text>
+                        </>
+                      ) : (
+                        <View style={styles.filteredMiniEmptyState}>
+                          <Text style={styles.filteredMiniEmptyIcon}>
+                            {item.icon}
+                          </Text>
+                          <Text
+                            style={styles.filteredMiniEmptyTitle}
+                            numberOfLines={2}
+                          >
+                            No {getHazardFilterEmptyLabel(
+                              item.key
+                            )} nearby
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </ScrollView>
+              )}
 
               <Text style={styles.compactDataSourceText}>
                 Live data from NASA EONET, USGS and Tomorrow.io
@@ -1625,16 +2083,10 @@ export default function MapScreen() {
               showsVerticalScrollIndicator={false}
             >
               {filterOptions.map((option) => {
-                const hasNoData =
-                  typeof option.count === 'number' && option.count === 0;
-
                 return (
                   <View
                     key={option.key}
-                    style={[
-                      styles.filterRow,
-                      hasNoData && styles.filterRowNoData,
-                    ]}
+                    style={styles.filterRow}
                   >
                     <View style={styles.filterRowLeft}>
                       <Text style={styles.filterRowIcon}>{option.icon}</Text>
@@ -1666,19 +2118,17 @@ export default function MapScreen() {
                       </View>
                     </View>
 
-                    {!hasNoData && (
-                      <Switch
-                        value={pendingFilters[option.key]}
-                        onValueChange={() =>
-                          togglePendingFilter(option.key)
-                        }
-                        trackColor={{
-                          false: '#D1D5DB',
-                          true: '#16A34A',
-                        }}
-                        thumbColor="#FFFFFF"
-                      />
-                    )}
+                    <Switch
+                      value={pendingFilters[option.key]}
+                      onValueChange={() =>
+                        togglePendingFilter(option.key)
+                      }
+                      trackColor={{
+                        false: '#D1D5DB',
+                        true: '#16A34A',
+                      }}
+                      thumbColor="#FFFFFF"
+                    />
                   </View>
                 );
               })}
@@ -2056,11 +2506,25 @@ const styles =
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      paddingHorizontal: 7,
+      paddingLeft: 7,
+      paddingRight: 5,
       paddingVertical: 6,
       borderRadius: 16,
       backgroundColor: 'rgba(255,255,255,0.97)',
       elevation: 5,
+      overflow: 'hidden',
+    },
+
+    hazardChipScroll: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    hazardChipScrollContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingRight: 8,
     },
 
     pinnedHazardChip: {
@@ -2130,6 +2594,59 @@ const styles =
       fontSize: 9,
       fontWeight: '900',
       color: '#9A6700',
+    },
+
+    dynamicHazardChip: {
+      minHeight: 34,
+      maxWidth: 132,
+      flexShrink: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 8,
+      borderRadius: 18,
+      borderWidth: 1,
+    },
+
+    dynamicHazardChipIcon: {
+      fontSize: 10,
+    },
+
+    dynamicHazardChipText: {
+      maxWidth: 64,
+      fontSize: 9,
+      fontWeight: '800',
+    },
+
+    dynamicHazardCountBadge: {
+      minWidth: 19,
+      height: 18,
+      paddingHorizontal: 5,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    dynamicHazardCountText: {
+      fontSize: 8,
+      fontWeight: '900',
+    },
+
+    noHazardFiltersChip: {
+      minHeight: 34,
+      paddingHorizontal: 11,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+      backgroundColor: '#F9FAFB',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+
+    noHazardFiltersText: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: '#6B7280',
     },
 
     moreFilterChip: {
@@ -2684,6 +3201,110 @@ const styles =
 
     compactDirectionDisabled: {
       opacity: 0.4,
+    },
+
+    filteredNearestTitle: {
+      marginTop: 9,
+      marginBottom: 7,
+      fontSize: 12,
+      fontWeight: '900',
+      color: '#111827',
+    },
+
+    filteredHazardCardsScrollContent: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: 8,
+      paddingRight: 8,
+    },
+
+    filteredHazardCard: {
+      width: 148,
+      minHeight: 74,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+      borderRadius: 10,
+      borderWidth: 1,
+    },
+
+    filteredHazardCardHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 7,
+    },
+
+    filteredHazardCardSource: {
+      fontSize: 7,
+      fontWeight: '900',
+    },
+
+    filteredHazardCardIcon: {
+      fontSize: 12,
+    },
+
+    filteredHazardCardTitle: {
+      fontSize: 11,
+      fontWeight: '900',
+      color: '#111827',
+    },
+
+    filteredHazardCardDistance: {
+      marginTop: 3,
+      fontSize: 9,
+      fontWeight: '700',
+    },
+
+    filteredHazardEmptyCard: {
+      minHeight: 94,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#F1F5F9',
+      backgroundColor: '#FAFAFA',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+    },
+
+    filteredHazardEmptyIcon: {
+      fontSize: 22,
+      color: '#9CA3AF',
+      marginBottom: 6,
+    },
+
+    filteredHazardEmptyTitle: {
+      fontSize: 11,
+      fontWeight: '900',
+      color: '#374151',
+      textAlign: 'center',
+    },
+
+    filteredHazardEmptySubtitle: {
+      marginTop: 3,
+      fontSize: 9,
+      color: '#6B7280',
+      textAlign: 'center',
+    },
+
+    filteredMiniEmptyState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 3,
+    },
+
+    filteredMiniEmptyIcon: {
+      fontSize: 17,
+      marginBottom: 4,
+      opacity: 0.55,
+    },
+
+    filteredMiniEmptyTitle: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: '#6B7280',
+      textAlign: 'center',
     },
 
     compactHazardsTitle: {

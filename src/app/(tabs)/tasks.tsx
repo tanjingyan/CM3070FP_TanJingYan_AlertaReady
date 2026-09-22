@@ -1,5 +1,11 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  Pressable,
+} from 'react-native';
 import { router } from 'expo-router';
 import { useUserProgress } from '../../hooks/use-UserProgress';
 
@@ -23,17 +29,78 @@ function getLevelProgress(xp: number, level: number) {
   const currentLevelXp = getCurrentLevelXp(level);
   const nextLevelXp = getNextLevelXp(level);
 
+  if (nextLevelXp === currentLevelXp) {
+    return 100;
+  }
+
   const progress =
-    ((xp - currentLevelXp) / (nextLevelXp - currentLevelXp)) * 100;
+    ((xp - currentLevelXp) /
+      (nextLevelXp - currentLevelXp)) *
+    100;
 
   return Math.min(Math.max(progress, 0), 100);
 }
+
+const modules = [
+  {
+    id: 'emergencyKit',
+    number: 1,
+    icon: '🎒',
+    title: 'Build Emergency Kit',
+    description:
+      'Learn what to prepare and build a practical emergency kit.',
+    reward: 50,
+  },
+  {
+    id: 'familyPlan',
+    number: 2,
+    icon: '👨‍👩‍👧',
+    title: 'Family Emergency Plan',
+    description:
+      'Create a simple communication and meeting plan for your household.',
+    reward: 40,
+  },
+  {
+    id: 'evacuationRoute',
+    number: 3,
+    icon: '🏃',
+    title: 'Know Your Evacuation Route',
+    description:
+      'Understand how to choose and practise a safe evacuation route.',
+    reward: 30,
+  },
+  {
+    id: 'documents',
+    number: 4,
+    icon: '📄',
+    title: 'Secure Important Documents',
+    description:
+      'Learn how to keep important records protected and accessible.',
+    reward: 20,
+  },
+  {
+    id: 'firstAid',
+    number: 5,
+    icon: '⛑️',
+    title: 'Learn Basic First Aid',
+    description:
+      'Review basic first-aid preparation and essential response steps.',
+    reward: 20,
+  },
+];
 
 export default function TasksScreen() {
   const { userData } = useUserProgress();
 
   const nextLevelXp = getNextLevelXp(userData.level);
-  const levelProgress = getLevelProgress(userData.xp, userData.level);
+  const levelProgress = getLevelProgress(
+    userData.xp,
+    userData.level
+  );
+
+  const completedModules = modules.filter((module) =>
+    userData.completedTasks.includes(module.title)
+  ).length;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -41,17 +108,44 @@ export default function TasksScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.title}>My Tasks</Text>
-
-        <View style={styles.progressCard}>
-          <View style={styles.circle}>
-            <Text style={styles.circleText}>{userData.preparedness}%</Text>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>
+              Preparedness Modules
+            </Text>
+            <Text style={styles.subtitle}>
+              Learn, practise and test your emergency preparedness skills.
+            </Text>
           </View>
 
-          <View style={{ flex: 1 }}>
-            <Text style={styles.progressTitle}>Overall Progress</Text>
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelBadgeText}>
+              Level {userData.level}
+            </Text>
+          </View>
+        </View>
+
+        {/* Progress */}
+        <View style={styles.progressCard}>
+          <View style={styles.progressCircle}>
+            <Text style={styles.progressPercent}>
+              {userData.preparedness}%
+            </Text>
+          </View>
+
+          <View style={styles.progressContent}>
+            <View style={styles.progressTitleRow}>
+              <Text style={styles.progressTitle}>
+                Overall Progress
+              </Text>
+              <Text style={styles.moduleCount}>
+                {completedModules}/{modules.length} modules
+              </Text>
+            </View>
+
             <Text style={styles.progressSub}>
-              Complete tasks to improve preparedness.
+              Complete modules to improve preparedness and earn XP.
             </Text>
 
             <View style={styles.progressBar}>
@@ -63,130 +157,185 @@ export default function TasksScreen() {
               />
             </View>
 
-            <Text style={styles.xpText}>
-              {userData.xp} / {nextLevelXp} XP
-            </Text>
+            <View style={styles.xpRow}>
+              <Text style={styles.xpText}>
+                {userData.xp} / {nextLevelXp} XP
+              </Text>
+              <Text style={styles.nextLevelText}>
+                Next level
+              </Text>
+            </View>
           </View>
-
-          <Text style={styles.levelText}>Level {userData.level}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>Today&apos;s Tasks</Text>
+        {/* Module explanation */}
+        <View style={styles.learningFlowCard}>
+          <Text style={styles.learningFlowTitle}>
+            How each module works
+          </Text>
 
-        <View style={styles.taskList}>
-          <TaskItem
-            icon="💼"
-            title="Build Emergency Kit"
-            description="Make sure you have essential supplies."
-            xp="+50 XP"
-            completed={userData.completedTasks.includes('Build Emergency Kit')}
-            onPress={() =>
-              router.push({
-                pathname: '/task-details',
-                params: { taskId: 'emergencyKit' },
-              } as any)
-            }
-          />
+          <View style={styles.learningStepsRow}>
+            <View style={styles.learningStep}>
+              <View style={styles.learningStepNumber}>
+                <Text style={styles.learningStepNumberText}>1</Text>
+              </View>
+              <Text style={styles.learningStepText}>Learn</Text>
+            </View>
 
-          <TaskItem
-            icon="👨‍👩‍👧"
-            title="Family Emergency Plan"
-            description="Create or review your family emergency plan."
-            xp="+40 XP"
-            completed={userData.completedTasks.includes('Family Emergency Plan')}
-            onPress={() =>
-              router.push({
-                pathname: '/task-details',
-                params: { taskId: 'familyPlan' },
-              } as any)
-            }
-          />
+            <Text style={styles.learningArrow}>›</Text>
 
-          <TaskItem
-            icon="🏃"
-            title="Know Your Evacuation Route"
-            description="Learn the safest evacuation route."
-            xp="+30 XP"
-            completed={userData.completedTasks.includes(
-              'Know Your Evacuation Route'
-            )}
-            onPress={() =>
-              router.push({
-                pathname: '/task-details',
-                params: { taskId: 'evacuationRoute' },
-              } as any)
-            }
-          />
+            <View style={styles.learningStep}>
+              <View style={styles.learningStepNumber}>
+                <Text style={styles.learningStepNumberText}>2</Text>
+              </View>
+              <Text style={styles.learningStepText}>Checklist</Text>
+            </View>
+
+            <Text style={styles.learningArrow}>›</Text>
+
+            <View style={styles.learningStep}>
+              <View style={styles.learningStepNumber}>
+                <Text style={styles.learningStepNumberText}>3</Text>
+              </View>
+              <Text style={styles.learningStepText}>Quiz</Text>
+            </View>
+          </View>
         </View>
 
-        <Text style={styles.sectionTitle}>More Tasks</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            Your Modules
+          </Text>
+          <Text style={styles.sectionSubtitle}>
+            Complete each module in order or revisit any unlocked module.
+          </Text>
+        </View>
 
-        <View style={styles.taskList}>
-          <TaskItem
-            icon="📄"
-            title="Secure Important Documents"
-            description="Keep important documents safe and accessible."
-            xp="+20 XP"
-            completed={userData.completedTasks.includes(
-              'Secure Important Documents'
-            )}
-            onPress={() =>
-              router.push({
-                pathname: '/task-details',
-                params: { taskId: 'documents' },
-              } as any)
-            }
-          />
+        <View style={styles.moduleList}>
+          {modules.map((module) => {
+            const completed =
+              userData.completedTasks.includes(module.title);
 
-          <TaskItem
-            icon="⛑️"
-            title="Learn Basic First Aid"
-            description="Learn basic first aid skills."
-            xp="+20 XP"
-            completed={userData.completedTasks.includes('Learn Basic First Aid')}
-            onPress={() =>
-              router.push({
-                pathname: '/task-details',
-                params: { taskId: 'firstAid' },
-              } as any)
-            }
-          />
+            return (
+              <ModuleCard
+                key={module.id}
+                number={module.number}
+                icon={module.icon}
+                title={module.title}
+                description={module.description}
+                reward={module.reward}
+                completed={completed}
+                onPress={() =>
+                  router.push({
+                    pathname: '/task-details',
+                    params: {
+                      taskId: module.id,
+                    },
+                  } as any)
+                }
+              />
+            );
+          })}
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-function TaskItem({
+function ModuleCard({
+  number,
   icon,
   title,
   description,
-  xp,
+  reward,
   completed,
   onPress,
 }: {
+  number: number;
   icon: string;
   title: string;
   description: string;
-  xp: string;
+  reward: number;
   completed: boolean;
   onPress: () => void;
 }) {
   return (
-    <Pressable style={styles.taskItem} onPress={onPress}>
-      <Text style={styles.check}>{completed ? '✅' : '○'}</Text>
+    <Pressable
+      style={({ pressed }) => [
+        styles.moduleCard,
+        completed && styles.moduleCardCompleted,
+        pressed && styles.moduleCardPressed,
+      ]}
+      onPress={onPress}
+    >
+      <View style={styles.moduleTopRow}>
+        <View style={styles.moduleNumberPill}>
+          <Text style={styles.moduleNumberText}>
+            MODULE {number}
+          </Text>
+        </View>
 
-      <View style={styles.iconBox}>
-        <Text style={styles.taskIcon}>{icon}</Text>
+        <View
+          style={[
+            styles.statusPill,
+            completed && styles.statusPillCompleted,
+          ]}
+        >
+          <Text
+            style={[
+              styles.statusText,
+              completed && styles.statusTextCompleted,
+            ]}
+          >
+            {completed ? 'Completed' : '3 sections'}
+          </Text>
+        </View>
       </View>
 
-      <View style={{ flex: 1 }}>
-        <Text style={styles.taskTitle}>{title}</Text>
-        <Text style={styles.taskDesc}>{description}</Text>
-      </View>
+      <View style={styles.moduleMainRow}>
+        <View
+          style={[
+            styles.moduleIconBox,
+            completed && styles.moduleIconBoxCompleted,
+          ]}
+        >
+          <Text style={styles.moduleIcon}>
+            {icon}
+          </Text>
+        </View>
 
-      <Text style={styles.reward}>{completed ? 'Done' : xp}</Text>
-      <Text style={styles.arrow}>›</Text>
+        <View style={styles.moduleInfo}>
+          <Text
+            style={[
+              styles.moduleTitle,
+              completed && styles.moduleTitleCompleted,
+            ]}
+          >
+            {title}
+          </Text>
+
+          <Text
+            style={styles.moduleDescription}
+            numberOfLines={2}
+          >
+            {description}
+          </Text>
+
+          <View style={styles.moduleMetaRow}>
+            <Text style={styles.moduleMeta}>
+              Learn • Checklist • Quiz
+            </Text>
+
+            <View style={styles.rewardPill}>
+              <Text style={styles.rewardText}>
+                ⚡ +{reward} XP
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <Text style={styles.chevron}>›</Text>
+      </View>
     </Pressable>
   );
 }
@@ -198,138 +347,338 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    padding: 18,
+    paddingHorizontal: 18,
+    paddingTop: 12,
     paddingBottom: 100,
+  },
+
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 18,
   },
 
   title: {
     fontSize: 24,
-    fontWeight: 'bold',
+    fontWeight: '900',
     color: '#111827',
-    marginBottom: 18,
+  },
+
+  subtitle: {
+    marginTop: 4,
+    maxWidth: 280,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#6B7280',
+  },
+
+  levelBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#ECFDF5',
+  },
+
+  levelBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#047857',
   },
 
   progressCard: {
-    backgroundColor: '#079455',
-    borderRadius: 16,
-    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
     gap: 14,
+    padding: 17,
+    marginBottom: 14,
+    borderRadius: 18,
+    backgroundColor: '#079455',
   },
 
-  circle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+  progressCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     borderWidth: 6,
-    borderColor: '#BBF7D0',
-    justifyContent: 'center',
+    borderColor: '#A7F3D0',
     alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  circleText: {
+  progressPercent: {
+    fontSize: 19,
+    fontWeight: '900',
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 20,
+  },
+
+  progressContent: {
+    flex: 1,
+  },
+
+  progressTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
 
   progressTitle: {
+    fontSize: 15,
+    fontWeight: '900',
     color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 16,
+  },
+
+  moduleCount: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#D1FAE5',
   },
 
   progressSub: {
-    color: '#DCFCE7',
-    fontSize: 12,
-    marginVertical: 6,
+    marginTop: 4,
+    marginBottom: 8,
+    fontSize: 10,
+    lineHeight: 14,
+    color: '#D1FAE5',
   },
 
   progressBar: {
     height: 7,
+    borderRadius: 999,
+    overflow: 'hidden',
     backgroundColor: '#34D399',
-    borderRadius: 8,
   },
 
   progressFill: {
     height: '100%',
+    borderRadius: 999,
     backgroundColor: '#FFFFFF',
-    borderRadius: 8,
+  },
+
+  xpRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
 
   xpText: {
+    fontSize: 10,
     color: '#FFFFFF',
-    fontSize: 11,
-    marginTop: 5,
   },
 
-  levelText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+  nextLevelText: {
+    fontSize: 9,
+    color: '#D1FAE5',
+  },
+
+  learningFlowCard: {
+    padding: 14,
+    marginBottom: 20,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+
+  learningFlowTitle: {
+    marginBottom: 12,
     fontSize: 12,
+    fontWeight: '900',
+    color: '#111827',
   },
 
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#111827',
+  learningStepsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  learningStep: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 5,
+  },
+
+  learningStepNumber: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DCFCE7',
+  },
+
+  learningStepNumberText: {
+    fontSize: 11,
+    fontWeight: '900',
+    color: '#15803D',
+  },
+
+  learningStepText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#374151',
+  },
+
+  learningArrow: {
+    marginTop: -14,
+    fontSize: 18,
+    color: '#9CA3AF',
+  },
+
+  sectionHeader: {
     marginBottom: 10,
   },
 
-  taskList: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: 6,
-    marginBottom: 18,
-    elevation: 2,
-  },
-
-  taskItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    gap: 10,
-  },
-
-  check: {
-    fontSize: 18,
-    width: 22,
-  },
-
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 10,
-    backgroundColor: '#ECFDF5',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  taskIcon: {
-    fontSize: 22,
-  },
-
-  taskTitle: {
-    fontWeight: 'bold',
-    fontSize: 13,
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '900',
     color: '#111827',
   },
 
-  taskDesc: {
+  sectionSubtitle: {
+    marginTop: 3,
+    fontSize: 10,
     color: '#6B7280',
-    fontSize: 11,
-    marginTop: 2,
   },
 
-  reward: {
-    color: '#10B981',
-    fontWeight: 'bold',
-    fontSize: 11,
+  moduleList: {
+    gap: 11,
   },
 
-  arrow: {
+  moduleCard: {
+    padding: 13,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+
+  moduleCardCompleted: {
+    borderColor: '#BBF7D0',
+    backgroundColor: '#F0FDF4',
+  },
+
+  moduleCardPressed: {
+    opacity: 0.78,
+  },
+
+  moduleTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+
+  moduleNumberPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#F3F4F6',
+  },
+
+  moduleNumberText: {
+    fontSize: 8,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    color: '#6B7280',
+  },
+
+  statusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#FFF7ED',
+  },
+
+  statusPillCompleted: {
+    backgroundColor: '#DCFCE7',
+  },
+
+  statusText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#C2410C',
+  },
+
+  statusTextCompleted: {
+    color: '#15803D',
+  },
+
+  moduleMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  moduleIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0FDF4',
+  },
+
+  moduleIconBoxCompleted: {
+    backgroundColor: '#DCFCE7',
+  },
+
+  moduleIcon: {
+    fontSize: 22,
+  },
+
+  moduleInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
+
+  moduleTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: '#111827',
+  },
+
+  moduleTitleCompleted: {
+    color: '#166534',
+  },
+
+  moduleDescription: {
+    marginTop: 3,
+    fontSize: 10,
+    lineHeight: 14,
+    color: '#6B7280',
+  },
+
+  moduleMetaRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+
+  moduleMeta: {
+    flex: 1,
+    fontSize: 8,
+    fontWeight: '700',
+    color: '#9CA3AF',
+  },
+
+  rewardPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#FEF3C7',
+  },
+
+  rewardText: {
+    fontSize: 8,
+    fontWeight: '900',
+    color: '#92400E',
+  },
+
+  chevron: {
     fontSize: 22,
     color: '#9CA3AF',
   },

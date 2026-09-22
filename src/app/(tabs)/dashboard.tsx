@@ -1,10 +1,10 @@
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useUserProgress } from '../../hooks/use-UserProgress';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { TOMORROW_API_KEY } from '../../constants/api';
 
 function getCurrentLevelXp(level: number) {
@@ -56,6 +56,49 @@ function getWeatherDescription(code: number) {
   }
 }
 
+
+function getDistanceInMeters(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+) {
+  const radius = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+  const c =
+    2 *
+    Math.atan2(
+      Math.sqrt(a),
+      Math.sqrt(1 - a)
+    );
+
+  return radius * c;
+}
+
+function getEonetMarkerColor(category: string) {
+  const value = category.toLowerCase();
+
+  if (value.includes('wildfire')) return '#F97316';
+  if (value.includes('storm')) return '#2563EB';
+  if (value.includes('volcano')) return '#7C3AED';
+  if (value.includes('flood')) return '#0891B2';
+  if (value.includes('landslide')) return '#92400E';
+  if (value.includes('dust') || value.includes('haze')) return '#A16207';
+  if (value.includes('drought')) return '#CA8A04';
+  if (value.includes('ice')) return '#38BDF8';
+
+  return '#F59E0B';
+}
+
 export default function DashboardScreen() {
   const { userData } = useUserProgress();
   const nextLevelXp = getNextLevelXp(userData.level);
@@ -63,61 +106,402 @@ export default function DashboardScreen() {
   const [temperature, setTemperature] = useState('--');
   const [weatherText, setWeatherText] = useState('Loading...');
   const [riskLevel, setRiskLevel] = useState('Low Risk');
-  
-  useEffect(() => {
-    getWeather();
-  }, []);
 
-  const getWeather = async () => {
+  // Shared live location/map snapshot used by the dashboard preview.
+  // The Emergency Map uses the same device GPS + NASA EONET + USGS +
+  // Tomorrow.io sources, so both screens show the same real-world area.
+  const [dashboardLocation, setDashboardLocation] =
+    useState<Location.LocationObjectCoords | null>(null);
+
+  const [locationLabel, setLocationLabel] =
+    useState('Locating...');
+
+  const [earthquakes, setEarthquakes] =
+    useState<any[]>([]);
+
+  const [disasterEvents, setDisasterEvents] =
+    useState<any[]>([]);
+
+  const [mapDataLoading, setMapDataLoading] =
+    useState(true);
+
+  // Refresh every time the Dashboard tab becomes active so it stays
+  // aligned with the device/emulator location used by Emergency Map.
+  useFocusEffect(
+    useCallback(() => {
+      syncDashboardWithEmergencyMap();
+    }, [])
+  );
+
+  async function syncDashboardWithEmergencyMap() {
+    setMapDataLoading(true);
+
     try {
       const { status } =
         await Location.requestForegroundPermissionsAsync();
 
       if (status !== 'granted') {
         setWeatherText('Location denied');
+        setLocationLabel('Location unavailable');
         return;
       }
 
-      const location =
-        await Location.getCurrentPositionAsync({});
+      let coords: Location.LocationObjectCoords;
 
-      const latitude = location.coords.latitude;
-      const longitude = location.coords.longitude;
+      try {
+        const currentLocation =
+          await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
 
+        coords = currentLocation.coords;
+      } catch (locationError) {
+        // Same fallback used by the Emergency Map prototype.
+        console.warn(
+          'Dashboard GPS unavailable. Using Singapore demo location.'
+        );
+
+        coords = {
+          latitude: 1.3521,
+          longitude: 103.8198,
+          altitude: null,
+          accuracy: null,
+          altitudeAccuracy: null,
+          heading: null,
+          speed: null,
+        };
+      }
+
+      setDashboardLocation(coords);
+
+      await Promise.all([
+        updateLocationLabel(
+          coords.latitude,
+          coords.longitude
+        ),
+        getWeatherForLocation(
+          coords.latitude,
+          coords.longitude
+        ),
+        getLiveHazards(),
+      ]);
+    } catch (error) {
+      console.warn(
+        'Dashboard map sync failed:',
+        error
+      );
+
+      setWeatherText('Unavailable');
+      setLocationLabel('Location unavailable');
+    } finally {
+      setMapDataLoading(false);
+    }
+  }
+
+  async function updateLocationLabel(
+    latitude: number,
+    longitude: number
+  ) {
+    try {
+      const places =
+        await Location.reverseGeocodeAsync({
+          latitude,
+          longitude,
+        });
+
+      const place = places[0];
+
+      if (!place) {
+        setLocationLabel(
+          `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`
+        );
+        return;
+      }
+
+      const primary =
+        place.city ||
+        place.subregion ||
+        place.district ||
+        place.name ||
+        '';
+
+      const secondary =
+        place.region ||
+        place.country ||
+        '';
+
+      const parts = [primary, secondary]
+        .filter(Boolean)
+        .filter(
+          (value, index, array) =>
+            array.indexOf(value) === index
+        );
+
+      setLocationLabel(
+        parts.join(', ') ||
+          `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`
+      );
+    } catch (error) {
+      console.warn(
+        'Reverse geocoding unavailable:',
+        error
+      );
+
+      setLocationLabel(
+        `${latitude.toFixed(3)}, ${longitude.toFixed(3)}`
+      );
+    }
+  }
+
+  async function getWeatherForLocation(
+    latitude: number,
+    longitude: number
+  ) {
+    try {
       const response = await fetch(
         `https://api.tomorrow.io/v4/weather/realtime?location=${latitude},${longitude}&apikey=${TOMORROW_API_KEY}`
       );
 
+      if (!response.ok) {
+        throw new Error(
+          `Tomorrow.io request failed: ${response.status}`
+        );
+      }
+
       const data = await response.json();
+      const values = data?.data?.values ?? {};
 
       const temp = Math.round(
-        data.data.values.temperature
+        values.temperature ?? 0
       );
 
-      const weatherCode = data.data.values.weatherCode;
-      const rain = data.data.values.rainIntensity ?? 0;
+      const weatherCode =
+        values.weatherCode ?? 0;
+
+      const rainIntensity =
+        values.rainIntensity ?? 0;
+
+      const precipitationProbability =
+        values.precipitationProbability ?? 0;
 
       setTemperature(`${temp}°C`);
+      setWeatherText(
+        getWeatherDescription(weatherCode)
+      );
 
-      setWeatherText(getWeatherDescription(weatherCode));
-
-      if (weatherCode === 4201 || rain > 10) {
+      // Same prototype weather-risk thresholds as Emergency Map.
+      if (
+        rainIntensity >= 10 ||
+        precipitationProbability >= 80
+      ) {
         setRiskLevel('High Risk');
-      }
-      else if (
-        weatherCode === 4200 ||
-        weatherCode === 4000 ||
-        rain > 0
+      } else if (
+        rainIntensity >= 3 ||
+        precipitationProbability >= 50
       ) {
         setRiskLevel('Moderate Risk');
-      }
-      else {
+      } else {
         setRiskLevel('Low Risk');
       }
     } catch (error) {
-      console.log(error);
+      console.warn(
+        'Dashboard weather unavailable:',
+        error
+      );
+
       setWeatherText('Unavailable');
     }
+  }
+
+  async function getLiveHazards() {
+    try {
+      const [eonetResponse, usgsResponse] =
+        await Promise.all([
+          fetch(
+            'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=100'
+          ),
+          fetch(
+            'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson'
+          ),
+        ]);
+
+      if (eonetResponse.ok) {
+        const eonetData =
+          await eonetResponse.json();
+
+        setDisasterEvents(
+          eonetData.events ?? []
+        );
+      }
+
+      if (usgsResponse.ok) {
+        const usgsData =
+          await usgsResponse.json();
+
+        setEarthquakes(
+          usgsData.features ?? []
+        );
+      }
+    } catch (error) {
+      console.warn(
+        'Dashboard hazard data unavailable:',
+        error
+      );
+    }
+  }
+
+  function getNearestEarthquake() {
+    if (
+      !dashboardLocation ||
+      earthquakes.length === 0
+    ) {
+      return null;
+    }
+
+    const valid = earthquakes
+      .map((earthquake) => {
+        const coordinates =
+          earthquake?.geometry?.coordinates;
+
+        if (
+          !Array.isArray(coordinates) ||
+          coordinates.length < 2
+        ) {
+          return null;
+        }
+
+        const longitude = coordinates[0];
+        const latitude = coordinates[1];
+
+        if (
+          typeof latitude !== 'number' ||
+          typeof longitude !== 'number'
+        ) {
+          return null;
+        }
+
+        const distanceKm =
+          getDistanceInMeters(
+            dashboardLocation.latitude,
+            dashboardLocation.longitude,
+            latitude,
+            longitude
+          ) / 1000;
+
+        return {
+          id: earthquake.id,
+          latitude,
+          longitude,
+          magnitude:
+            earthquake?.properties?.mag ?? 0,
+          place:
+            earthquake?.properties?.place ??
+            'Unknown location',
+          distanceKm,
+        };
+      })
+      .filter((item) => item !== null)
+      .sort(
+        (a, b) =>
+          a!.distanceKm -
+          b!.distanceKm
+      );
+
+    return valid[0] ?? null;
+  }
+
+  function getNearestEonetEvent() {
+    if (
+      !dashboardLocation ||
+      disasterEvents.length === 0
+    ) {
+      return null;
+    }
+
+    const valid = disasterEvents
+      .map((event) => {
+        if (
+          !event.geometry ||
+          event.geometry.length === 0
+        ) {
+          return null;
+        }
+
+        const geometry =
+          event.geometry[
+            event.geometry.length - 1
+          ];
+
+        if (geometry.type !== 'Point') {
+          return null;
+        }
+
+        const coordinates =
+          geometry.coordinates;
+
+        if (
+          !Array.isArray(coordinates) ||
+          coordinates.length < 2
+        ) {
+          return null;
+        }
+
+        const longitude = coordinates[0];
+        const latitude = coordinates[1];
+
+        if (
+          typeof latitude !== 'number' ||
+          typeof longitude !== 'number'
+        ) {
+          return null;
+        }
+
+        const distanceKm =
+          getDistanceInMeters(
+            dashboardLocation.latitude,
+            dashboardLocation.longitude,
+            latitude,
+            longitude
+          ) / 1000;
+
+        return {
+          id: event.id,
+          title:
+            event.title ??
+            'Natural Event',
+          category:
+            event.categories?.[0]?.title ??
+            'Natural Event',
+          latitude,
+          longitude,
+          distanceKm,
+        };
+      })
+      .filter((item) => item !== null)
+      .sort(
+        (a, b) =>
+          a!.distanceKm -
+          b!.distanceKm
+      );
+
+    return valid[0] ?? null;
+  }
+
+  const nearestEarthquake =
+    getNearestEarthquake();
+
+  const nearestEonetEvent =
+    getNearestEonetEvent();
+
+  const mapRegion = {
+    latitude:
+      dashboardLocation?.latitude ??
+      1.3521,
+    longitude:
+      dashboardLocation?.longitude ??
+      103.8198,
+    latitudeDelta: 0.025,
+    longitudeDelta: 0.025,
   };
 
   return (
@@ -127,7 +511,9 @@ export default function DashboardScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.greeting}>Good morning, {userData.displayName} 👋</Text>
             <Text style={styles.subtitle}>Stay prepared. Stay safe.</Text>
-            <Text style={styles.location}>📍 Singapore</Text>
+            <Text style={styles.location} numberOfLines={1}>
+              📍 {locationLabel}
+            </Text>
           </View>
 
           <View style={styles.weatherBox}>
@@ -248,67 +634,126 @@ export default function DashboardScreen() {
           
           <Pressable
             style={styles.largeMapPreview}
-            onPress={() => router.push('/(tabs)/map' as any)}
+            onPress={() =>
+              router.push('/(tabs)/map' as any)
+            }
           >
             <MapView
               style={styles.dashboardMap}
               pointerEvents="none"
-              initialRegion={{
-                latitude: 1.3521,
-                longitude: 103.8198,
-                latitudeDelta: 0.018,
-                longitudeDelta: 0.018,
-              }}
+              region={mapRegion}
+              showsUserLocation={
+                !!dashboardLocation
+              }
+              showsMyLocationButton={false}
             >
-              <Marker
-                coordinate={{ latitude: 1.3521, longitude: 103.8198 }}
-                title="Your Location"
-                pinColor="blue"
-              />
+              {nearestEarthquake && (
+                <Marker
+                  coordinate={{
+                    latitude:
+                      nearestEarthquake.latitude,
+                    longitude:
+                      nearestEarthquake.longitude,
+                  }}
+                  title={`M${nearestEarthquake.magnitude} Earthquake`}
+                  description={`${nearestEarthquake.distanceKm.toFixed(
+                    0
+                  )} km away • USGS`}
+                  pinColor="purple"
+                />
+              )}
 
-              <Marker
-                coordinate={{ latitude: 1.354, longitude: 103.821 }}
-                title="Shelter"
-                pinColor="green"
-              />
+              {nearestEonetEvent && (
+                <Marker
+                  coordinate={{
+                    latitude:
+                      nearestEonetEvent.latitude,
+                    longitude:
+                      nearestEonetEvent.longitude,
+                  }}
+                  title={
+                    nearestEonetEvent.title
+                  }
+                  description={`${nearestEonetEvent.category} • ${nearestEonetEvent.distanceKm.toFixed(
+                    0
+                  )} km away • NASA EONET`}
+                  pinColor={getEonetMarkerColor(
+                    nearestEonetEvent.category
+                  )}
+                />
+              )}
 
-              <Marker
-                coordinate={{ latitude: 1.348, longitude: 103.82 }}
-                title="Hospital"
-                pinColor="red"
-              />
-
-              <Marker
-                coordinate={{ latitude: 1.351, longitude: 103.824 }}
-                title="Flood Risk Area"
-                pinColor="orange"
-              />
-
-              <Circle
-                center={{ latitude: 1.351, longitude: 103.824 }}
-                radius={500}
-                strokeColor="rgba(239, 68, 68, 0.6)"
-                fillColor="rgba(239, 68, 68, 0.18)"
-              />
+              {riskLevel === 'High Risk' &&
+                dashboardLocation && (
+                  <Circle
+                    center={{
+                      latitude:
+                        dashboardLocation.latitude,
+                      longitude:
+                        dashboardLocation.longitude,
+                    }}
+                    radius={5000}
+                    strokeColor="rgba(239, 68, 68, 0.55)"
+                    fillColor="rgba(239, 68, 68, 0.12)"
+                  />
+                )}
             </MapView>
+
+            {mapDataLoading && (
+              <View style={styles.mapLoadingBadge}>
+                <Text style={styles.mapLoadingText}>
+                  Syncing map…
+                </Text>
+              </View>
+            )}
           </Pressable>
 
           <View style={styles.mapStatsRow}>
-            <Text style={styles.mapStat}>🏠 2 Shelters</Text>
-            <Text style={styles.mapStat}>🏥 1 Hospital</Text>
-            <Text style={styles.mapStat}>⚠️ 1 Risk Zone</Text>
+            <Text style={styles.mapStat}>
+              🌋 {earthquakes.length} Quakes
+            </Text>
+
+            <Text style={styles.mapStat}>
+              ⚠️ {disasterEvents.length} Events
+            </Text>
+
+            <Text style={styles.mapStat}>
+              🌦️ {riskLevel}
+            </Text>
           </View>
 
-          <View style={styles.shelterCard}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.shelterTitle}>🏠 National School Shelter</Text>
-              <Text style={styles.shelterDistance}>2.1 km away</Text>
-              <Text style={styles.shelterCapacity}>Capacity: 500 people</Text>
+          <View style={styles.locationSyncCard}>
+            <View style={styles.locationSyncIcon}>
+              <Text style={styles.locationSyncEmoji}>
+                📍
+              </Text>
             </View>
 
-            <View style={styles.openButton}>
-              <Text style={styles.openButtonText}>Open 24/7</Text>
+            <View style={{ flex: 1 }}>
+              <Text
+                style={styles.locationSyncTitle}
+                numberOfLines={1}
+              >
+                {locationLabel}
+              </Text>
+
+              <Text style={styles.locationSyncText}>
+                Dashboard map is using the same device location and live hazard sources as Emergency Map.
+              </Text>
             </View>
+
+            <Pressable
+              style={styles.locationSyncButton}
+              onPress={() =>
+                router.push('/(tabs)/map' as any)
+              }
+            >
+              <Text
+                style={styles.locationSyncButtonText}
+              >
+                Open
+              </Text>
+            </Pressable>
           </View>
 
           <View style={styles.riskInfoCard}>
@@ -373,7 +818,17 @@ export default function DashboardScreen() {
             <Text style={styles.viewAll}>View All</Text>
           </View>
 
-          <Activity icon="⚠️" title="Flood warning issued for Singapore" time="Just now" />
+          <Activity
+            icon={riskLevel === 'Low Risk' ? '✅' : '⚠️'}
+            title={
+              riskLevel === 'High Risk'
+                ? `High weather risk near ${locationLabel}`
+                : riskLevel === 'Moderate Risk'
+                ? `Weather advisory near ${locationLabel}`
+                : `No immediate weather risk near ${locationLabel}`
+            }
+            time="Live"
+          />
           <Activity icon="✅" title={`${userData.completedTasks.length} tasks completed`} time="Today" />
           <Activity icon="🏠" title="New shelter added near your location" time="2 days ago" />
         </View>
@@ -688,6 +1143,22 @@ const styles = StyleSheet.create({
     fontSize: 22,
   },
 
+  mapLoadingBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+  },
+
+  mapLoadingText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#4B5563',
+  },
+
   mapStatsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -698,6 +1169,60 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#374151',
     fontWeight: 'bold',
+  },
+
+  locationSyncCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 11,
+    marginBottom: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D1FAE5',
+    backgroundColor: '#F0FDF4',
+  },
+
+  locationSyncIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DCFCE7',
+  },
+
+  locationSyncEmoji: {
+    fontSize: 16,
+  },
+
+  locationSyncTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#111827',
+  },
+
+  locationSyncText: {
+    marginTop: 2,
+    fontSize: 9,
+    lineHeight: 12,
+    color: '#6B7280',
+  },
+
+  locationSyncButton: {
+    minWidth: 48,
+    minHeight: 28,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#10B981',
+  },
+
+  locationSyncButtonText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
   },
 
   shelterCard: {
