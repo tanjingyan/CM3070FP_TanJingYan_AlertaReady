@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Linking,
@@ -10,24 +10,55 @@ import {
   Modal,
   Switch,
 } from 'react-native';
-import MapView, { Circle, Marker } from 'react-native-maps';
+import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 
 import {
-  TOMORROW_API_KEY,
   GOOGLE_PLACES_API_KEY,
 } from '../../constants/api';
 
+type SelectedHazardDetail = {
+  id: string;
+  filterKey: string;
+  icon: string;
+  category: string;
+  title: string;
+  source: string;
+  latitude: number;
+  longitude: number;
+  distanceText: string;
+  detailLines: string[];
+};
+
 export default function MapScreen() {
+  const mapRef = useRef<MapView | null>(null);
+
   const [location, setLocation] =
     useState<Location.LocationObjectCoords | null>(null);
 
-  const [showEmergencyAlert, setShowEmergencyAlert] =
-    useState(false);
-
   const [riskLevel, setRiskLevel] =
-    useState('Low Risk');
+    useState('Unavailable');
+
+  // Human-readable explanation for the app-defined weather-risk result.
+  // Open-Meteo supplies the variables; Alerta Ready applies the prototype
+  // thresholds below. This is not an official weather warning.
+  const [weatherRiskDetails, setWeatherRiskDetails] = useState(
+    'No elevated weather indicators detected.'
+  );
+
+  const [airQuality, setAirQuality] = useState({
+    usAqi: 0,
+    pm25: 0,
+    pm10: 0,
+    aerosolOpticalDepth: 0,
+    usAqiLabel: 'Unavailable',
+  });
+
+
+  const [hasAirQualityData, setHasAirQualityData] =
+    useState(false);
 
   const [shelters, setShelters] =
     useState<any[]>([]);
@@ -43,7 +74,15 @@ export default function MapScreen() {
   const [earthquakes, setEarthquakes] =
     useState<any[]>([]);
 
-  // Map marker filters
+  // Hazard selected by tapping a nearest-hazard card or a hazard marker.
+  // When populated, the map focuses on that location and shows a dismissible
+  // floating information card above the map.
+  const [selectedHazard, setSelectedHazard] =
+    useState<SelectedHazardDetail | null>(null);
+
+  // Map marker / information filters.
+  // Event feeds, local conditions and nearby facilities are kept separate so
+  // a number such as AQI is never presented as though it were an event count.
   const [mapFilters, setMapFilters] = useState({
     shelters: true,
     hospitals: true,
@@ -53,11 +92,12 @@ export default function MapScreen() {
     volcanoes: false,
     floods: false,
     landslides: false,
-    dustHaze: false,
+    dustHazeEvents: false,
     drought: false,
     ice: false,
     otherNatural: false,
-    weather: false,
+    weatherRisk: false,
+    airQuality: false,
   });
 
   // Filter-sheet UI state.
@@ -74,11 +114,12 @@ export default function MapScreen() {
     | 'volcanoes'
     | 'floods'
     | 'landslides'
-    | 'dustHaze'
+    | 'dustHazeEvents'
     | 'drought'
     | 'ice'
     | 'otherNatural'
-    | 'weather';
+    | 'weatherRisk'
+    | 'airQuality';
 
   function toggleMapFilter(filter: MapFilter) {
     setMapFilters((previous) => ({
@@ -109,11 +150,12 @@ export default function MapScreen() {
       volcanoes: false,
       floods: false,
       landslides: false,
-      dustHaze: false,
+      dustHazeEvents: false,
       drought: false,
       ice: false,
       otherNatural: false,
-      weather: false,
+      weatherRisk: false,
+      airQuality: false,
     });
   }
 
@@ -129,7 +171,7 @@ export default function MapScreen() {
     if (c.includes('volcano')) return 'volcanoes';
     if (c.includes('flood')) return 'floods';
     if (c.includes('landslide')) return 'landslides';
-    if (c.includes('dust') || c.includes('haze') || c.includes('smoke')) return 'dustHaze';
+    if (c.includes('dust') || c.includes('haze') || c.includes('smoke')) return 'dustHazeEvents';
     if (c.includes('drought')) return 'drought';
     if (c.includes('sea and lake ice') || c.includes('ice')) return 'ice';
     return 'otherNatural';
@@ -142,7 +184,7 @@ export default function MapScreen() {
       case 'volcanoes': return '#7C3AED';
       case 'floods': return '#0891B2';
       case 'landslides': return '#92400E';
-      case 'dustHaze': return '#A16207';
+      case 'dustHazeEvents': return '#A16207';
       case 'drought': return '#CA8A04';
       case 'ice': return '#38BDF8';
       default: return '#6B7280';
@@ -161,7 +203,7 @@ export default function MapScreen() {
         return 'Flood event';
       case 'landslides':
         return 'Landslide event';
-      case 'dustHaze':
+      case 'dustHazeEvents':
         return 'Dust / haze event';
       case 'drought':
         return 'Drought event';
@@ -184,7 +226,7 @@ export default function MapScreen() {
         return '🌊';
       case 'landslides':
         return '⛰️';
-      case 'dustHaze':
+      case 'dustHazeEvents':
         return '🌫️';
       case 'drought':
         return '🏜️';
@@ -232,7 +274,7 @@ export default function MapScreen() {
           text: '#7E22CE',
           badge: '#E9D5FF',
         };
-      case 'weather':
+      case 'weatherRisk':
         return {
           background: '#E0F2FE',
           border: '#BAE6FD',
@@ -246,7 +288,8 @@ export default function MapScreen() {
           text: '#92400E',
           badge: '#FDE68A',
         };
-      case 'dustHaze':
+      case 'dustHazeEvents':
+      case 'airQuality':
         return {
           background: '#F5F5F4',
           border: '#D6D3D1',
@@ -289,12 +332,14 @@ export default function MapScreen() {
         return 'Floods';
       case 'earthquakes':
         return 'Earthquakes';
-      case 'weather':
-        return 'Weather';
+      case 'weatherRisk':
+        return 'Weather Risk';
       case 'landslides':
         return 'Landslides';
-      case 'dustHaze':
-        return 'Dust / Haze';
+      case 'dustHazeEvents':
+        return 'Dust / Haze Events';
+      case 'airQuality':
+        return 'Air Quality / Haze';
       case 'drought':
         return 'Drought';
       case 'ice':
@@ -318,12 +363,14 @@ export default function MapScreen() {
         return 'floods';
       case 'earthquakes':
         return 'earthquakes';
-      case 'weather':
-        return 'hazardous weather';
+      case 'weatherRisk':
+        return 'weather-risk data';
       case 'landslides':
         return 'landslides';
-      case 'dustHaze':
+      case 'dustHazeEvents':
         return 'dust or haze events';
+      case 'airQuality':
+        return 'air-quality data';
       case 'drought':
         return 'drought events';
       case 'ice':
@@ -391,36 +438,580 @@ export default function MapScreen() {
     return !looksLikeObviousNonMedicalBusiness;
   }
 
-  const eonetCategoryCounts = disasterEvents.reduce(
-    (counts, event) => {
-      const category = event.categories?.[0]?.title ?? 'Natural Event';
-      const key = getEonetFilterKey(category);
-      if (key in counts) (counts as any)[key] += 1;
-      return counts;
-    },
-    { wildfires: 0, severeStorms: 0, volcanoes: 0, floods: 0,
-      landslides: 0, dustHaze: 0, drought: 0, ice: 0, otherNatural: 0 }
-  );
+  // ---------------------------------------------------------
+  // GLOBAL EMERGENCY / EVACUATION SHELTER VALIDATION
+  // ---------------------------------------------------------
+  // Google Places does not expose one universal dedicated shelter
+  // place type, so Alerta Ready uses location-biased keyword searches
+  // and then validates the returned name/address before displaying it.
+  //
+  // The goal is to support locations globally while avoiding obvious
+  // false positives such as animal shelters, homeless shelters,
+  // bus shelters and picnic shelters.
+
+  function normaliseShelterText(value: unknown) {
+    return String(value ?? '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[’'`]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  const GLOBAL_SHELTER_POSITIVE_KEYWORDS = [
+    // English / internationally used terms
+    'emergency shelter',
+    'evacuation shelter',
+    'evacuation center',
+    'evacuation centre',
+    'emergency evacuation center',
+    'emergency evacuation centre',
+    'disaster shelter',
+    'disaster evacuation center',
+    'disaster evacuation centre',
+    'civil defense shelter',
+    'civil defence shelter',
+    'civil defense public shelter',
+    'civil defence public shelter',
+    'public emergency shelter',
+    'relief shelter',
+    'relief center',
+    'relief centre',
+    'refuge center',
+    'refuge centre',
+    'temporary evacuation center',
+    'temporary evacuation centre',
+    'temporary emergency shelter',
+    'emergency assembly point',
+    'evacuation assembly point',
+    'cyclone shelter',
+    'hurricane shelter',
+    'storm shelter',
+    'tornado shelter',
+    'tsunami shelter',
+    'tsunami evacuation',
+    'earthquake shelter',
+    'earthquake evacuation',
+
+    // Indonesian
+    'tempat evakuasi',
+    'pusat evakuasi',
+    'posko pengungsian',
+    'tempat pengungsian',
+    'posko bencana',
+    'titik kumpul evakuasi',
+    'shelter bencana',
+
+    // Malay
+    'pusat pemindahan sementara',
+    'pusat pemindahan',
+    'pusat perlindungan kecemasan',
+
+    // Spanish
+    'centro de evacuacion',
+    'refugio de emergencia',
+    'albergue de emergencia',
+    'punto de evacuacion',
+
+    // French
+    'centre d evacuation',
+    'abri d urgence',
+    'refuge d urgence',
+
+    // Portuguese
+    'centro de evacuacao',
+    'abrigo de emergencia',
+    'ponto de evacuacao',
+
+    // German
+    'evakuierungszentrum',
+    'notunterkunft',
+    'schutzraum',
+
+    // Italian
+    'centro di evacuazione',
+    'rifugio di emergenza',
+
+    // Japanese
+    '避難所',
+    '指定避難所',
+    '緊急避難場所',
+    '津波避難所',
+
+    // Korean
+    '대피소',
+    '재난 대피소',
+    '지진 대피소',
+
+    // Chinese (Simplified / Traditional)
+    '避难所',
+    '应急避难场所',
+    '緊急避難場所',
+    '避難場所',
+
+    // Arabic
+    'مركز إيواء',
+    'مأوى طوارئ',
+    'مركز إخلاء',
+
+    // Hindi
+    'आपातकालीन आश्रय',
+    'निकासी केंद्र',
+    'शरण स्थल',
+
+    // Thai
+    'ศูนย์อพยพ',
+    'ที่พักพิงฉุกเฉิน',
+
+    // Vietnamese
+    'trung tâm sơ tán',
+    'nơi trú ẩn khẩn cấp',
+  ];
+
+  const GLOBAL_SHELTER_NEGATIVE_KEYWORDS = [
+    'animal shelter',
+    'dog shelter',
+    'cat shelter',
+    'pet shelter',
+    'wildlife shelter',
+    'homeless shelter',
+    'homelessness shelter',
+    'women shelter',
+    "women's shelter",
+    'domestic violence shelter',
+    'youth shelter',
+    'night shelter',
+    'bus shelter',
+    'bicycle shelter',
+    'bike shelter',
+    'picnic shelter',
+    'smoking shelter',
+    'parking shelter',
+    'tax shelter',
+  ];
+
+  function isLikelyEmergencyShelter(place: any) {
+    const name = normaliseShelterText(place?.name);
+    const vicinity = normaliseShelterText(
+      place?.vicinity ?? place?.formatted_address ?? ''
+    );
+    const combined = `${name} ${vicinity}`;
+
+    const businessStatus = String(
+      place?.business_status ?? ''
+    ).toUpperCase();
+
+    if (
+      businessStatus &&
+      businessStatus !== 'OPERATIONAL'
+    ) {
+      return false;
+    }
+
+    const containsExcludedMeaning =
+      GLOBAL_SHELTER_NEGATIVE_KEYWORDS.some(
+        (keyword) =>
+          combined.includes(
+            normaliseShelterText(keyword)
+          )
+      );
+
+    if (containsExcludedMeaning) {
+      return false;
+    }
+
+    return GLOBAL_SHELTER_POSITIVE_KEYWORDS.some(
+      (keyword) =>
+        combined.includes(
+          normaliseShelterText(keyword)
+        )
+    );
+  }
+
+  function getGlobalShelterSearchTerms(
+    countryCode?: string | null
+  ) {
+    const universalTerms = [
+      'emergency shelter',
+      'evacuation center',
+      'disaster shelter',
+      'public emergency shelter',
+      'civil defense shelter',
+      'temporary evacuation center',
+    ];
+
+    const cc = String(
+      countryCode ?? ''
+    ).toUpperCase();
+
+    let regionalTerms: string[] = [];
+
+    if (cc === 'SG') {
+      regionalTerms = [
+        'Civil Defence Public Shelter',
+        'Civil Defence Shelter',
+      ];
+    } else if (cc === 'ID') {
+      regionalTerms = [
+        'tempat evakuasi',
+        'pusat evakuasi',
+        'posko pengungsian',
+      ];
+    } else if (cc === 'MY') {
+      regionalTerms = [
+        'pusat pemindahan sementara',
+        'pusat pemindahan',
+      ];
+    } else if (cc === 'JP') {
+      regionalTerms = [
+        '避難所',
+        '指定避難所',
+        '津波避難所',
+      ];
+    } else if (cc === 'KR') {
+      regionalTerms = [
+        '대피소',
+        '재난 대피소',
+      ];
+    } else if (['CN', 'HK', 'MO', 'TW'].includes(cc)) {
+      regionalTerms = [
+        '应急避难场所',
+        '避难所',
+        '緊急避難場所',
+      ];
+    } else if (
+      [
+        'ES', 'MX', 'AR', 'CL', 'CO', 'PE', 'VE', 'EC',
+        'BO', 'PY', 'UY', 'CR', 'PA', 'GT', 'HN', 'SV',
+        'NI', 'DO', 'PR',
+      ].includes(cc)
+    ) {
+      regionalTerms = [
+        'centro de evacuación',
+        'refugio de emergencia',
+        'albergue de emergencia',
+      ];
+    } else if (
+      ['FR', 'BE', 'LU', 'MC'].includes(cc)
+    ) {
+      regionalTerms = [
+        "centre d'évacuation",
+        "abri d'urgence",
+      ];
+    } else if (
+      ['PT', 'BR', 'AO', 'MZ'].includes(cc)
+    ) {
+      regionalTerms = [
+        'centro de evacuação',
+        'abrigo de emergência',
+      ];
+    } else if (
+      ['DE', 'AT', 'CH'].includes(cc)
+    ) {
+      regionalTerms = [
+        'Evakuierungszentrum',
+        'Notunterkunft',
+      ];
+    } else if (cc === 'IT') {
+      regionalTerms = [
+        'centro di evacuazione',
+        'rifugio di emergenza',
+      ];
+    } else if (cc === 'TH') {
+      regionalTerms = [
+        'ศูนย์อพยพ',
+        'ที่พักพิงฉุกเฉิน',
+      ];
+    } else if (cc === 'VN') {
+      regionalTerms = [
+        'trung tâm sơ tán',
+        'nơi trú ẩn khẩn cấp',
+      ];
+    } else if (cc === 'IN') {
+      regionalTerms = [
+        'आपातकालीन आश्रय',
+        'निकासी केंद्र',
+      ];
+    } else if (
+      [
+        'AE', 'SA', 'QA', 'BH', 'KW', 'OM', 'JO', 'LB',
+        'EG', 'IQ', 'MA', 'DZ', 'TN',
+      ].includes(cc)
+    ) {
+      regionalTerms = [
+        'مركز إيواء',
+        'مركز إخلاء',
+      ];
+    } else if (cc === 'PH') {
+      regionalTerms = [
+        'evacuation center',
+        'barangay evacuation center',
+      ];
+    }
+
+    return Array.from(
+      new Set([
+        ...regionalTerms,
+        ...universalTerms,
+      ])
+    ).slice(0, 8);
+  }
+
+  function dedupePlaces(
+    places: any[]
+  ) {
+    const seen =
+      new Set<string>();
+
+    return places.filter(
+      (place: any) => {
+        const id = String(
+          place?.place_id ??
+            `${place?.name ?? ''}-${place?.geometry?.location?.lat ?? ''}-${place?.geometry?.location?.lng ?? ''}`
+        );
+
+        if (seen.has(id)) {
+          return false;
+        }
+
+        seen.add(id);
+        return true;
+      }
+    );
+  }
+
+  function formatDistance(
+    distanceKm: number
+  ) {
+    if (!Number.isFinite(distanceKm)) {
+      return '--';
+    }
+
+    if (distanceKm < 1) {
+      return `${Math.max(
+        1,
+        Math.round(distanceKm * 1000)
+      )} m`;
+    }
+
+    return `${distanceKm.toFixed(1)} km`;
+  }
+
+
+  // Standard U.S. EPA AQI category labels for the Open-Meteo us_aqi value.
+  function getUsAqiLabel(usAqi: number) {
+    if (!Number.isFinite(usAqi) || usAqi < 0) return 'Unavailable';
+    if (usAqi <= 50) return 'Good';
+    if (usAqi <= 100) return 'Moderate';
+    if (usAqi <= 150) return 'Unhealthy for Sensitive Groups';
+    if (usAqi <= 200) return 'Unhealthy';
+    if (usAqi <= 300) return 'Very Unhealthy';
+    return 'Hazardous';
+  }
+
+  // Emergency-location results are only treated as nearby if their
+  // coordinates are within this app-defined display distance.
+  const EMERGENCY_LOCATION_MAX_KM = 50;
+
+  // The Android emulator / map search can sometimes use a country's
+  // geographic centre when only a country name is selected.
+  // -0.789275, 113.921327 is commonly used as Indonesia's centroid,
+  // not a real city/neighbourhood location.
+  function isGenericIndonesiaCentroid(
+    latitude: number,
+    longitude: number
+  ) {
+    const centroidLat = -0.789275;
+    const centroidLng = 113.921327;
+
+    const distanceKm =
+      getDistanceInMeters(
+        latitude,
+        longitude,
+        centroidLat,
+        centroidLng
+      ) / 1000;
+
+    return distanceKm < 5;
+  }
+
+  // Location-aware filter counts.
+  // Counts represent EONET/USGS event locations within 500 km of the user's location,
+  // not worldwide totals from the source APIs. EONET is also API-bounded around this area.
+  // 500 km is an Alerta Ready display radius, not an official warning radius.
+  const NEARBY_FILTER_RADIUS_KM = 500;
+
+  const nearbyEonetCategoryCounts =
+    disasterEvents.reduce(
+      (counts, event) => {
+        if (
+          !location ||
+          !event?.geometry?.length
+        ) {
+          return counts;
+        }
+
+        const geometry =
+          event.geometry[
+            event.geometry.length - 1
+          ];
+
+        if (
+          geometry?.type !== 'Point' ||
+          !Array.isArray(
+            geometry?.coordinates
+          ) ||
+          geometry.coordinates.length < 2
+        ) {
+          return counts;
+        }
+
+        const longitude =
+          Number(
+            geometry.coordinates[0]
+          );
+
+        const latitude =
+          Number(
+            geometry.coordinates[1]
+          );
+
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude)
+        ) {
+          return counts;
+        }
+
+        const distanceKm =
+          getDistanceInMeters(
+            location.latitude,
+            location.longitude,
+            latitude,
+            longitude
+          ) / 1000;
+
+        if (
+          distanceKm >
+          NEARBY_FILTER_RADIUS_KM
+        ) {
+          return counts;
+        }
+
+        const category =
+          event.categories?.[0]
+            ?.title ??
+          'Natural Event';
+
+        const key =
+          getEonetFilterKey(
+            category
+          );
+
+        if (key in counts) {
+          (counts as any)[key] += 1;
+        }
+
+        return counts;
+      },
+      {
+        wildfires: 0,
+        severeStorms: 0,
+        volcanoes: 0,
+        floods: 0,
+        landslides: 0,
+        dustHazeEvents: 0,
+        drought: 0,
+        ice: 0,
+        otherNatural: 0,
+      }
+    );
+
+  const nearbyEarthquakeCount =
+    earthquakes.reduce(
+      (count, earthquake) => {
+        if (!location) {
+          return count;
+        }
+
+        const coordinates =
+          earthquake?.geometry
+            ?.coordinates;
+
+        if (
+          !Array.isArray(
+            coordinates
+          ) ||
+          coordinates.length < 2
+        ) {
+          return count;
+        }
+
+        const longitude =
+          Number(coordinates[0]);
+
+        const latitude =
+          Number(coordinates[1]);
+
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude)
+        ) {
+          return count;
+        }
+
+        const distanceKm =
+          getDistanceInMeters(
+            location.latitude,
+            location.longitude,
+            latitude,
+            longitude
+          ) / 1000;
+
+        return distanceKm <=
+          NEARBY_FILTER_RADIUS_KM
+          ? count + 1
+          : count;
+      },
+      0
+    );
+
+  type FilterGroup = 'Hazard Events' | 'Local Conditions' | 'Nearby Facilities';
 
   const filterOptions: Array<{
     key: MapFilter;
     label: string;
     icon: string;
     count: number | string;
+    group: FilterGroup;
   }> = [
-    { key: 'wildfires', label: 'Wildfires', icon: '🔥', count: eonetCategoryCounts.wildfires },
-    { key: 'severeStorms', label: 'Storms', icon: '🌪️', count: eonetCategoryCounts.severeStorms },
-    { key: 'volcanoes', label: 'Volcanoes', icon: '🌋', count: eonetCategoryCounts.volcanoes },
-    { key: 'floods', label: 'Floods', icon: '🌊', count: eonetCategoryCounts.floods },
-    { key: 'earthquakes', label: 'Earthquakes', icon: '🌋', count: earthquakes.length },
-    { key: 'weather', label: 'Weather', icon: '🌦️', count: riskLevel },
-    { key: 'landslides', label: 'Landslides', icon: '⛰️', count: eonetCategoryCounts.landslides },
-    { key: 'dustHaze', label: 'Dust / Haze', icon: '🌫️', count: eonetCategoryCounts.dustHaze },
-    { key: 'drought', label: 'Drought', icon: '🏜️', count: eonetCategoryCounts.drought },
-    { key: 'ice', label: 'Ice', icon: '🧊', count: eonetCategoryCounts.ice },
-    { key: 'otherNatural', label: 'Other natural events', icon: '⚠️', count: eonetCategoryCounts.otherNatural },
-    { key: 'shelters', label: 'Shelters', icon: '🏠', count: shelters.length },
-    { key: 'hospitals', label: 'Hospitals', icon: '🏥', count: hospitals.length },
+    { key: 'wildfires', label: 'Wildfires', icon: '🔥', count: nearbyEonetCategoryCounts.wildfires, group: 'Hazard Events' },
+    { key: 'severeStorms', label: 'Storms', icon: '🌪️', count: nearbyEonetCategoryCounts.severeStorms, group: 'Hazard Events' },
+    { key: 'volcanoes', label: 'Volcanoes', icon: '🌋', count: nearbyEonetCategoryCounts.volcanoes, group: 'Hazard Events' },
+    { key: 'floods', label: 'Floods', icon: '🌊', count: nearbyEonetCategoryCounts.floods, group: 'Hazard Events' },
+    { key: 'earthquakes', label: 'Earthquakes', icon: '〰️', count: nearbyEarthquakeCount, group: 'Hazard Events' },
+    { key: 'landslides', label: 'Landslides', icon: '⛰️', count: nearbyEonetCategoryCounts.landslides, group: 'Hazard Events' },
+    { key: 'dustHazeEvents', label: 'Dust / Haze Events', icon: '🌫️', count: nearbyEonetCategoryCounts.dustHazeEvents, group: 'Hazard Events' },
+    { key: 'drought', label: 'Drought', icon: '🏜️', count: nearbyEonetCategoryCounts.drought, group: 'Hazard Events' },
+    { key: 'ice', label: 'Ice', icon: '🧊', count: nearbyEonetCategoryCounts.ice, group: 'Hazard Events' },
+    { key: 'otherNatural', label: 'Other Natural Events', icon: '⚠️', count: nearbyEonetCategoryCounts.otherNatural, group: 'Hazard Events' },
+    { key: 'weatherRisk', label: 'Weather Risk', icon: '🌦️', count: riskLevel, group: 'Local Conditions' },
+    {
+      key: 'airQuality',
+      label: 'Air Quality / Haze',
+      icon: '🌫️',
+      count: hasAirQualityData ? `AQI ${Math.round(airQuality.usAqi)}` : '--',
+      group: 'Local Conditions',
+    },
+    {
+      key: 'shelters',
+      label: 'Nearby Shelters',
+      icon: '🏠',
+      count: shelters.length,
+      group: 'Nearby Facilities',
+    },
+    { key: 'hospitals', label: 'Nearby Hospitals', icon: '🏥', count: hospitals.length, group: 'Nearby Facilities' },
   ];
 
   const hazardFilterOptions =
@@ -440,10 +1031,55 @@ export default function MapScreen() {
     activeHazardFilterOptions;
 
   useEffect(() => {
-    getUserLocation();
-    getDisasterEvents();
-    getEarthquakes();
-  }, []);
+    if (
+      selectedHazard &&
+      selectedHazard.filterKey in mapFilters &&
+      !mapFilters[
+        selectedHazard.filterKey as MapFilter
+      ]
+    ) {
+      setSelectedHazard(null);
+    }
+  }, [mapFilters, selectedHazard]);
+
+  // Tabs remain mounted, so refresh location every time the Map tab
+  // becomes active. This picks up a newly selected emulator location.
+  useFocusEffect(
+    useCallback(() => {
+      // Refresh both the 24-hour USGS feed and the location-dependent data
+      // whenever the user returns to the Map tab.
+      getEarthquakes();
+      getUserLocation();
+    }, [])
+  );
+
+  // initialRegion is only applied once. Explicitly re-centre whenever
+  // the stored GPS/emulator coordinates change.
+  useEffect(() => {
+    if (
+      !location ||
+      !mapRef.current
+    ) {
+      return;
+    }
+
+    mapRef.current.animateToRegion(
+      {
+        latitude:
+          location.latitude,
+        longitude:
+          location.longitude,
+        latitudeDelta:
+          0.08,
+        longitudeDelta:
+          0.08,
+      },
+      450
+    );
+  }, [
+    location?.latitude,
+    location?.longitude,
+  ]);
 
   // ---------------------------------------------------------
   // DISTANCE CALCULATION
@@ -648,10 +1284,17 @@ export default function MapScreen() {
         return {
           id: event.id,
           title: event.title ?? 'Natural Event',
+          description: event.description ?? '',
           category,
           latitude,
           longitude,
           distanceKm,
+          eventDate: geometry?.date ?? null,
+          sourceNames: Array.isArray(event?.sources)
+            ? event.sources
+                .map((source: any) => source?.id || source?.title)
+                .filter(Boolean)
+            : [],
         };
       })
       .filter((event) => event !== null);
@@ -667,36 +1310,237 @@ export default function MapScreen() {
     return matchingEvents[0];
   }
 
+  function buildEonetHazardDetail(
+    event: any,
+    latitude: number,
+    longitude: number,
+    distanceKm: number
+  ): SelectedHazardDetail {
+    const category =
+      event?.categories?.[0]?.title ??
+      'Natural Event';
+
+    const geometry =
+      event?.geometry?.length
+        ? event.geometry[event.geometry.length - 1]
+        : null;
+
+    const observedAt =
+      geometry?.date &&
+      !Number.isNaN(new Date(geometry.date).getTime())
+        ? new Date(geometry.date).toLocaleString()
+        : null;
+
+    const sourceNames =
+      Array.isArray(event?.sources)
+        ? event.sources
+            .map((source: any) =>
+              String(
+                source?.title ??
+                  source?.id ??
+                  ''
+              ).trim()
+            )
+            .filter(Boolean)
+        : [];
+
+    const detailLines = [
+      `${distanceKm.toFixed(0)} km from your current location`,
+      observedAt
+        ? `Event geometry time: ${observedAt}`
+        : 'Event time not supplied by source',
+      event?.description
+        ? String(event.description)
+        : sourceNames.length > 0
+          ? `Referenced source: ${sourceNames.join(', ')}`
+          : 'Open natural event listed by NASA EONET',
+    ];
+
+    return {
+      id: `eonet-${event?.id ?? `${latitude}-${longitude}`}`,
+      filterKey: getEonetFilterKey(category),
+      icon: getNaturalEventSummaryIcon(category),
+      category,
+      title:
+        event?.title ??
+        getNaturalEventSummaryTitle(category),
+      source: 'NASA EONET',
+      latitude,
+      longitude,
+      distanceText: `${distanceKm.toFixed(0)} km away`,
+      detailLines,
+    };
+  }
+
+  function buildEarthquakeHazardDetail(
+    earthquake: any,
+    latitude: number,
+    longitude: number,
+    distanceKm: number
+  ): SelectedHazardDetail {
+    const magnitude =
+      Number(earthquake?.properties?.mag ?? 0);
+
+    const place =
+      earthquake?.properties?.place ??
+      'Unknown location';
+
+    const time =
+      earthquake?.properties?.time;
+
+    const depth =
+      Array.isArray(
+        earthquake?.geometry?.coordinates
+      )
+        ? earthquake.geometry.coordinates[2]
+        : null;
+
+    const earthquakeTime =
+      typeof time === 'number'
+        ? new Date(time).toLocaleString()
+        : 'Unknown time';
+
+    const depthText =
+      typeof depth === 'number'
+        ? `${depth.toFixed(1)} km`
+        : 'Unknown';
+
+    return {
+      id: `usgs-${earthquake?.id ?? `${latitude}-${longitude}`}`,
+      filterKey: 'earthquakes',
+      icon: '〰️',
+      category: 'Earthquake',
+      title: `M${magnitude} earthquake`,
+      source: 'USGS',
+      latitude,
+      longitude,
+      distanceText: `${distanceKm.toFixed(0)} km away`,
+      detailLines: [
+        place,
+        `Depth: ${depthText}`,
+        `Time: ${earthquakeTime}`,
+      ],
+    };
+  }
+
+  function focusSelectedHazard(
+    hazard: SelectedHazardDetail
+  ) {
+    setSelectedHazard(hazard);
+
+    mapRef.current?.animateToRegion(
+      {
+        latitude: hazard.latitude,
+        longitude: hazard.longitude,
+        latitudeDelta: 0.18,
+        longitudeDelta: 0.18,
+      },
+      650
+    );
+  }
+
+  function closeSelectedHazard() {
+    setSelectedHazard(null);
+  }
+
   // ---------------------------------------------------------
   // NASA EONET
   // Real currently open natural events
   // ---------------------------------------------------------
 
-  async function getDisasterEvents() {
-    try {
-      const response = await fetch(
-        'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=100'
-      );
+  async function getDisasterEvents(
+    latitude: number,
+    longitude: number
+  ) {
+    // EONET supports bounding-box queries. Bounding the API request around
+    // the 500 km monitored area prevents a global result limit from hiding a
+    // nearby event. Exact relevance is still checked locally with Haversine.
+    const latitudeDelta = NEARBY_FILTER_RADIUS_KM / 111;
+    const longitudeScale = Math.max(
+      0.15,
+      Math.cos((latitude * Math.PI) / 180)
+    );
+    const longitudeDelta =
+      NEARBY_FILTER_RADIUS_KM / (111 * longitudeScale);
 
-      if (!response.ok) {
-        throw new Error(
-          `NASA EONET request failed: ${response.status}`
-        );
+    const minLongitude = Math.max(-180, longitude - longitudeDelta);
+    const maxLongitude = Math.min(180, longitude + longitudeDelta);
+    const minLatitude = Math.max(-90, latitude - latitudeDelta);
+    const maxLatitude = Math.min(90, latitude + latitudeDelta);
+
+    // EONET bbox order: min longitude, max latitude, max longitude, min latitude.
+    const bbox = [
+      minLongitude,
+      maxLatitude,
+      maxLongitude,
+      minLatitude,
+    ].join(',');
+
+    const EONET_URL =
+      `https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=500&bbox=${encodeURIComponent(bbox)}`;
+
+    try {
+      let responseText = '';
+
+      // EONET can occasionally return an empty/incomplete body.
+      // Retry once and keep the previous valid map data if it fails.
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const response = await fetch(
+            `${EONET_URL}&_=${Date.now()}`,
+            {
+              method: 'GET',
+              headers: {
+                Accept: 'application/json',
+              },
+            }
+          );
+
+          if (!response.ok) {
+            console.warn(`NASA EONET request failed: ${response.status}`);
+            continue;
+          }
+
+          responseText = await response.text();
+          if (responseText.trim()) break;
+
+          console.warn(
+            `NASA EONET returned an empty response. Attempt ${attempt}/2.`
+          );
+        } catch (requestError) {
+          console.warn(
+            `NASA EONET request attempt ${attempt} failed:`,
+            requestError
+          );
+        }
       }
 
-      const data = await response.json();
+      if (!responseText.trim()) {
+        console.warn(
+          'NASA EONET is temporarily unavailable. Keeping previous event data.'
+        );
+        return;
+      }
 
-      console.log('NASA EONET events:');
-      console.log(data.events);
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn(
+          'NASA EONET returned invalid JSON. Keeping previous event data.',
+          parseError
+        );
+        return;
+      }
 
-      setDisasterEvents(
-        data.events ?? []
-      );
+      if (!Array.isArray(data?.events)) {
+        console.warn('NASA EONET response did not contain an events array.');
+        return;
+      }
+
+      setDisasterEvents(data.events);
     } catch (error) {
-      console.error(
-        'Error fetching NASA EONET disaster events:',
-        error
-      );
+      console.warn('NASA EONET data is temporarily unavailable:', error);
     }
   }
 
@@ -708,33 +1552,61 @@ export default function MapScreen() {
   async function getEarthquakes() {
     try {
       const response = await fetch(
-        'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson'
+        'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
+        {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+          },
+        }
       );
 
       if (!response.ok) {
-        throw new Error(
+        console.warn(
           `USGS request failed: ${response.status}`
         );
+        return;
       }
 
-      const data = await response.json();
+      const responseText = await response.text();
 
-      console.log('USGS earthquakes:');
-      console.log(data.features);
+      if (!responseText.trim()) {
+        console.warn(
+          'USGS returned an empty response. Keeping previous earthquake data.'
+        );
+        return;
+      }
 
-      setEarthquakes(
-        data.features ?? []
-      );
+      let data: any;
+
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.warn(
+          'USGS returned invalid JSON. Keeping previous earthquake data.',
+          parseError
+        );
+        return;
+      }
+
+      if (!Array.isArray(data?.features)) {
+        console.warn(
+          'USGS response did not contain a features array.'
+        );
+        return;
+      }
+
+      setEarthquakes(data.features);
     } catch (error) {
-      console.error(
-        'Error fetching USGS earthquakes:',
+      console.warn(
+        'USGS earthquake data is temporarily unavailable:',
         error
       );
     }
   }
 
   // ---------------------------------------------------------
-  // USER LOCATION + GOOGLE PLACES + TOMORROW.IO
+  // USER LOCATION + GOOGLE PLACES + OPEN-METEO
   // ---------------------------------------------------------
 
   async function getUserLocation() {
@@ -761,183 +1633,706 @@ export default function MapScreen() {
         currentLocation.coords
       );
 
+      // Reverse geocoding is used only to choose better local-language
+      // shelter search terms. If it fails, the global English terms are
+      // still used, so shelter discovery continues to work worldwide.
+      let detectedCountryCode: string | null = null;
+
+      try {
+        const geocoded =
+          await Location.reverseGeocodeAsync({
+            latitude:
+              currentLocation.coords.latitude,
+            longitude:
+              currentLocation.coords.longitude,
+          });
+
+        detectedCountryCode =
+          geocoded?.[0]?.isoCountryCode
+            ?.toUpperCase() ?? null;
+
+        console.log(
+          'Shelter search country code:',
+          detectedCountryCode ?? 'unknown'
+        );
+      } catch (reverseGeocodeError) {
+        console.warn(
+          'Reverse geocoding unavailable; using global shelter search terms:',
+          reverseGeocodeError
+        );
+      }
+
+      // Clear location-dependent results immediately so a previous city's
+      // hazards/conditions are never shown while the new requests are running.
+      setDisasterEvents([]);
+      setRiskLevel('Unavailable');
+      setWeatherRiskDetails('Weather risk data unavailable.');
+      setHasAirQualityData(false);
+      setAirQuality({
+        usAqi: 0,
+        pm25: 0,
+        pm10: 0,
+        aerosolOpticalDepth: 0,
+        usAqiLabel: 'Unavailable',
+      });
+
+      getDisasterEvents(
+        currentLocation.coords.latitude,
+        currentLocation.coords.longitude
+      );
+
+      if (
+        isGenericIndonesiaCentroid(
+          currentLocation.coords.latitude,
+          currentLocation.coords.longitude
+        )
+      ) {
+        Alert.alert(
+          'Choose a specific city location',
+          'Your emulator is currently using the generic centre coordinate for Indonesia, not a real city/neighbourhood. Nearby hospitals, shelters and directions can therefore be misleading. In Android Emulator Location, choose a specific city or enter exact coordinates (for example Palu, Jakarta or Palangka Raya), then tap the location refresh button.'
+        );
+      }
+
+      // Clear results from the previous GPS location immediately.
+      // This prevents stale hospitals/shelters from another city
+      // being displayed while the new requests are running.
+      setHospitals([]);
+      setShelters([]);
+
       // -----------------------------------------------------
-      // GOOGLE PLACES - HOSPITALS
+      // GOOGLE PLACES - NEAREST HOSPITALS
+      // -----------------------------------------------------
+      //
+      // rankby=distance asks Google Places to order results by
+      // proximity to the current coordinates. No radius is used
+      // with rankby=distance.
       // -----------------------------------------------------
 
       try {
+        const latitude =
+          currentLocation.coords.latitude;
+
+        const longitude =
+          currentLocation.coords.longitude;
+
         const hospitalResponse =
           await fetch(
-            `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${currentLocation.coords.latitude},${currentLocation.coords.longitude}&radius=5000&type=hospital&key=${GOOGLE_PLACES_API_KEY}`
+            `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&rankby=distance&type=hospital&key=${GOOGLE_PLACES_API_KEY}`
           );
 
         const hospitalData =
           await hospitalResponse.json();
 
-        console.log(
-          'Hospital results:'
-        );
-
-        console.log(
-          hospitalData.results
-        );
-
-        const rawHospitalResults =
-          hospitalData.results ?? [];
-
-        const filteredHospitals =
-          rawHospitalResults.filter(
-            (place: any) =>
-              isLikelyHospital(place)
-          );
-
-        const removedHospitalResults =
-          rawHospitalResults.filter(
-            (place: any) =>
-              !isLikelyHospital(place)
-          );
-
-        if (removedHospitalResults.length > 0) {
-          console.log(
-            'Filtered suspicious hospital results:',
-            removedHospitalResults.map(
-              (place: any) => place?.name
-            )
+        if (
+          hospitalData?.status !== 'OK' &&
+          hospitalData?.status !== 'ZERO_RESULTS'
+        ) {
+          console.warn(
+            'Google Places hospital status:',
+            hospitalData?.status,
+            hospitalData?.error_message ?? ''
           );
         }
 
+        const rawHospitalResults =
+          Array.isArray(
+            hospitalData?.results
+          )
+            ? hospitalData.results
+            : [];
+
+        const filteredHospitals =
+          rawHospitalResults.filter(
+            (place: any) => {
+              if (!isLikelyHospital(place)) {
+                return false;
+              }
+
+              const placeLatitude = Number(
+                place?.geometry?.location?.lat
+              );
+              const placeLongitude = Number(
+                place?.geometry?.location?.lng
+              );
+
+              if (
+                !Number.isFinite(placeLatitude) ||
+                !Number.isFinite(placeLongitude)
+              ) {
+                return false;
+              }
+
+              const distanceKm =
+                getDistanceInMeters(
+                  latitude,
+                  longitude,
+                  placeLatitude,
+                  placeLongitude
+                ) / 1000;
+
+              return distanceKm <= EMERGENCY_LOCATION_MAX_KM;
+            }
+          );
+
         console.log(
-          'Validated hospital results:',
-          filteredHospitals
+          'Validated nearest hospital results:',
+          filteredHospitals.map(
+            (place: any) => ({
+              name: place?.name,
+              vicinity: place?.vicinity,
+              types: place?.types,
+            })
+          )
         );
 
         setHospitals(
           filteredHospitals
         );
       } catch (error) {
-        console.error(
+        console.warn(
           'Hospital API error:',
           error
         );
+
+        setHospitals([]);
       }
 
       // -----------------------------------------------------
-      // GOOGLE PLACES - PROTOTYPE SHELTER LOCATIONS
-      //
-      // Google Places does not provide an emergency-shelter
-      // place type here, so schools are being used only as
-      // prototype shelter locations.
+      // GOOGLE PLACES - GLOBAL SHELTER DISCOVERY
+      // -----------------------------------------------------
+      // There is no single worldwide official shelter database exposed
+      // through Google Places. Alerta Ready therefore:
+      // 1) detects the current country when possible,
+      // 2) searches several local/international shelter terms,
+      // 3) rejects non-disaster meanings such as animal/bus shelters,
+      // 4) requires explicit shelter/evacuation wording in the returned
+      //    place name or address,
+      // 5) keeps only results inside the app-defined 50 km facility range.
       // -----------------------------------------------------
 
       try {
-        const shelterResponse =
-          await fetch(
-            `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${currentLocation.coords.latitude},${currentLocation.coords.longitude}&radius=5000&type=school&key=${GOOGLE_PLACES_API_KEY}`
+        const latitude =
+          currentLocation.coords.latitude;
+
+        const longitude =
+          currentLocation.coords.longitude;
+
+        const shelterKeywords =
+          getGlobalShelterSearchTerms(
+            detectedCountryCode
           );
 
-        const shelterData =
-          await shelterResponse.json();
+        const shelterResponses =
+          await Promise.all(
+            shelterKeywords.map(
+              async keyword => {
+                try {
+                  const response =
+                    await fetch(
+                      `https://maps.googleapis.com/maps/api/place/nearbysearch/json?location=${latitude},${longitude}&rankby=distance&keyword=${encodeURIComponent(
+                        keyword
+                      )}&key=${GOOGLE_PLACES_API_KEY}`
+                    );
+
+                  const data =
+                    await response.json();
+
+                  if (
+                    data?.status !== 'OK' &&
+                    data?.status !== 'ZERO_RESULTS'
+                  ) {
+                    console.warn(
+                      `Google Places shelter status for "${keyword}":`,
+                      data?.status,
+                      data?.error_message ?? ''
+                    );
+                  }
+
+                  const results =
+                    Array.isArray(
+                      data?.results
+                    )
+                      ? data.results
+                      : [];
+
+                  return results.map(
+                    (place: any) => ({
+                      ...place,
+                      matchedShelterQuery:
+                        keyword,
+                    })
+                  );
+                } catch (requestError) {
+                  console.warn(
+                    `Shelter search failed for "${keyword}":`,
+                    requestError
+                  );
+                  return [];
+                }
+              }
+            )
+          );
+
+        let rawShelterResults =
+          shelterResponses.flat();
+
+        const buildValidatedShelters =
+          (places: any[]) =>
+            dedupePlaces(places)
+              .filter(
+                (place: any) => {
+                  if (
+                    !isLikelyEmergencyShelter(
+                      place
+                    )
+                  ) {
+                    return false;
+                  }
+
+                  const placeLatitude =
+                    Number(
+                      place?.geometry
+                        ?.location?.lat
+                    );
+
+                  const placeLongitude =
+                    Number(
+                      place?.geometry
+                        ?.location?.lng
+                    );
+
+                  if (
+                    !Number.isFinite(
+                      placeLatitude
+                    ) ||
+                    !Number.isFinite(
+                      placeLongitude
+                    )
+                  ) {
+                    return false;
+                  }
+
+                  const distanceKm =
+                    getDistanceInMeters(
+                      latitude,
+                      longitude,
+                      placeLatitude,
+                      placeLongitude
+                    ) / 1000;
+
+                  return (
+                    distanceKm <=
+                    EMERGENCY_LOCATION_MAX_KM
+                  );
+                }
+              )
+              .map((place: any) => {
+                const placeLatitude =
+                  Number(
+                    place?.geometry
+                      ?.location?.lat
+                  );
+
+                const placeLongitude =
+                  Number(
+                    place?.geometry
+                      ?.location?.lng
+                  );
+
+                const distanceKm =
+                  getDistanceInMeters(
+                    latitude,
+                    longitude,
+                    placeLatitude,
+                    placeLongitude
+                  ) / 1000;
+
+                return {
+                  ...place,
+                  distanceKm,
+                  shelterKind:
+                    'emergency-evacuation',
+                };
+              })
+              .sort(
+                (a: any, b: any) =>
+                  a.distanceKm -
+                  b.distanceKm
+              );
+
+        let validatedShelters =
+          buildValidatedShelters(
+            rawShelterResults
+          );
+
+        // If Nearby Search returned no verified shelter, try Text Search
+        // with the strongest local/global terms. The same validation is
+        // applied afterwards, so this does not lower the accuracy filter.
+        if (
+          validatedShelters.length === 0
+        ) {
+          const fallbackTerms =
+            shelterKeywords.slice(0, 3);
+
+          const fallbackResponses =
+            await Promise.all(
+              fallbackTerms.map(
+                async keyword => {
+                  try {
+                    const response =
+                      await fetch(
+                        `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+                          keyword
+                        )}&location=${latitude},${longitude}&radius=${
+                          EMERGENCY_LOCATION_MAX_KM *
+                          1000
+                        }&key=${GOOGLE_PLACES_API_KEY}`
+                      );
+
+                    const data =
+                      await response.json();
+
+                    if (
+                      data?.status !== 'OK' &&
+                      data?.status !==
+                        'ZERO_RESULTS'
+                    ) {
+                      console.warn(
+                        `Google Places shelter text-search status for "${keyword}":`,
+                        data?.status,
+                        data?.error_message ?? ''
+                      );
+                    }
+
+                    const results =
+                      Array.isArray(
+                        data?.results
+                      )
+                        ? data.results
+                        : [];
+
+                    return results.map(
+                      (place: any) => ({
+                        ...place,
+                        matchedShelterQuery:
+                          keyword,
+                      })
+                    );
+                  } catch (fallbackError) {
+                    console.warn(
+                      `Shelter text-search fallback failed for "${keyword}":`,
+                      fallbackError
+                    );
+                    return [];
+                  }
+                }
+              )
+            );
+
+          rawShelterResults = [
+            ...rawShelterResults,
+            ...fallbackResponses.flat(),
+          ];
+
+          validatedShelters =
+            buildValidatedShelters(
+              rawShelterResults
+            );
+        }
 
         console.log(
-          'Prototype shelter results:'
-        );
-
-        console.log(
-          shelterData.results
+          'Validated global emergency / evacuation shelter results:',
+          validatedShelters.map(
+            (place: any) => ({
+              name: place?.name,
+              vicinity:
+                place?.vicinity,
+              distanceKm:
+                place?.distanceKm,
+              matchedQuery:
+                place?.matchedShelterQuery,
+            })
+          )
         );
 
         setShelters(
-          shelterData.results ?? []
+          validatedShelters
         );
       } catch (error) {
-        console.error(
-          'Shelter API error:',
+        console.warn(
+          'Global shelter API error:',
+          error
+        );
+
+        setShelters([]);
+      }
+
+      // -----------------------------------------------------
+      // OPEN-METEO MULTI-VARIABLE WEATHER CONTEXT
+      // Detailed weather is shown on the Dashboard. The Map only
+      // keeps the overall contextual risk status for hazard awareness.
+      // These are Alerta Ready-defined indicators, not official warnings.
+      // -----------------------------------------------------
+
+      try {
+        const latitude = currentLocation.coords.latitude;
+        const longitude = currentLocation.coords.longitude;
+
+        const weatherVariables = [
+          'precipitation_probability',
+          'rain',
+          'precipitation',
+          'soil_moisture_0_to_1cm',
+          'wind_speed_10m',
+          'wind_gusts_10m',
+          'temperature_2m',
+          'apparent_temperature',
+        ].join(',');
+
+        const weatherResponse = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=${weatherVariables}&forecast_hours=1&wind_speed_unit=kmh&timezone=auto`,
+          {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+            },
+          }
+        );
+
+        if (!weatherResponse.ok) {
+          console.warn(
+            `Open-Meteo request failed: ${weatherResponse.status}`
+          );
+        } else {
+          const responseText = await weatherResponse.text();
+
+          if (!responseText.trim()) {
+            console.warn(
+              'Open-Meteo returned an empty response.'
+            );
+          } else {
+            let weatherData: any = null;
+
+            try {
+              weatherData = JSON.parse(responseText);
+            } catch (parseError) {
+              console.warn(
+                'Open-Meteo returned invalid JSON:',
+                parseError
+              );
+            }
+
+            if (weatherData) {
+              const rain = Number(
+                weatherData?.hourly?.rain?.[0] ?? 0
+              );
+
+              const precipitation = Number(
+                weatherData?.hourly?.precipitation?.[0] ?? 0
+              );
+
+              const precipitationProbability = Number(
+                weatherData?.hourly?.precipitation_probability?.[0] ?? 0
+              );
+
+              const soilMoisture = Number(
+                weatherData?.hourly?.soil_moisture_0_to_1cm?.[0] ?? 0
+              );
+
+              const windSpeed = Number(
+                weatherData?.hourly?.wind_speed_10m?.[0] ?? 0
+              );
+
+              const windGusts = Number(
+                weatherData?.hourly?.wind_gusts_10m?.[0] ?? 0
+              );
+
+              const temperature = Number(
+                weatherData?.hourly?.temperature_2m?.[0] ?? 0
+              );
+
+              const apparentTemperature = Number(
+                weatherData?.hourly?.apparent_temperature?.[0] ?? 0
+              );
+
+              const rainFloodRisk =
+                rain >= 10 ||
+                precipitation >= 10 ||
+                precipitationProbability >= 80 ||
+                (soilMoisture >= 0.45 && precipitationProbability >= 60)
+                  ? 'High Risk'
+                  : rain >= 3 ||
+                      precipitation >= 3 ||
+                      precipitationProbability >= 50 ||
+                      (soilMoisture >= 0.35 && precipitationProbability >= 40)
+                    ? 'Moderate Risk'
+                    : 'Low Risk';
+
+              const windRisk =
+                windSpeed >= 60 || windGusts >= 75
+                  ? 'High Risk'
+                  : windSpeed >= 40 || windGusts >= 50
+                    ? 'Moderate Risk'
+                    : 'Low Risk';
+
+              const hottest = Math.max(
+                temperature,
+                apparentTemperature
+              );
+
+              const coldest = Math.min(
+                temperature,
+                apparentTemperature
+              );
+
+              const temperatureRisk =
+                hottest >= 40 || coldest <= 0
+                  ? 'High Risk'
+                  : hottest >= 35 || coldest <= 5
+                    ? 'Moderate Risk'
+                    : 'Low Risk';
+
+              const risks = [
+                rainFloodRisk,
+                windRisk,
+                temperatureRisk,
+              ];
+
+              const overallRisk = risks.includes('High Risk')
+                ? 'High Risk'
+                : risks.includes('Moderate Risk')
+                  ? 'Moderate Risk'
+                  : 'Low Risk';
+
+              const weatherIndicators: string[] = [];
+
+              if (rainFloodRisk !== 'Low Risk') {
+                weatherIndicators.push(
+                  `${rainFloodRisk.toLowerCase()} rain / flood-related indicators`
+                );
+              }
+
+              if (windRisk !== 'Low Risk') {
+                weatherIndicators.push(
+                  `${windRisk.toLowerCase()} wind / gust indicators`
+                );
+              }
+
+              if (temperatureRisk !== 'Low Risk') {
+                weatherIndicators.push(
+                  `${temperatureRisk.toLowerCase()} temperature indicators`
+                );
+              }
+
+              setRiskLevel(overallRisk);
+              setWeatherRiskDetails(
+                weatherIndicators.length > 0
+                  ? `Alerta Ready detected ${weatherIndicators.join(', ')}.`
+                  : 'No elevated weather indicators detected.'
+              );
+            }
+          }
+        }
+      } catch (error) {
+        console.warn(
+          'Open-Meteo weather data is temporarily unavailable:',
           error
         );
       }
 
       // -----------------------------------------------------
-      // TOMORROW.IO LIVE WEATHER
+      // OPEN-METEO AIR QUALITY / HAZE CONTEXT
+      // NASA EONET is a curated natural-event feed and may not
+      // list local haze, so local haze is checked separately.
       // -----------------------------------------------------
-
       try {
-        const response =
-          await fetch(
-            `https://api.tomorrow.io/v4/weather/realtime?location=${currentLocation.coords.latitude},${currentLocation.coords.longitude}&apikey=${TOMORROW_API_KEY}`
-          );
+        const latitude =
+          currentLocation.coords.latitude;
 
-        if (!response.ok) {
-          throw new Error(
-            `Tomorrow.io request failed: ${response.status}`
-          );
-        }
+        const longitude =
+          currentLocation.coords.longitude;
 
-        const data =
-          await response.json();
-
-        console.log(
-          'Tomorrow API response:'
+        const aqResponse = await fetch(
+          `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${latitude}&longitude=${longitude}&current=pm2_5,pm10,aerosol_optical_depth,us_aqi&timezone=auto`,
+          {
+            method: 'GET',
+            headers: {
+              Accept: 'application/json',
+            },
+          }
         );
 
-        console.log(
-          data?.data?.values
-        );
-
-        const rainIntensity =
-          data?.data?.values
-            ?.rainIntensity ?? 0;
-
-        const precipitationProbability =
-          data?.data?.values
-            ?.precipitationProbability ??
-          0;
-
-        console.log(
-          'Rain intensity:',
-          rainIntensity
-        );
-
-        console.log(
-          'Precipitation probability:',
-          precipitationProbability
-        );
-
-        // Prototype weather-risk classification.
-        // This is NOT an official flood warning.
-
-        if (
-          rainIntensity >= 10 ||
-          precipitationProbability >=
-            80
-        ) {
-          setRiskLevel(
-            'High Risk'
-          );
-
-          setShowEmergencyAlert(
-            true
-          );
-
-          Alert.alert(
-            '⚠️ Severe Weather Alert',
-            'Heavy rainfall conditions were detected near your current location. This is a weather-based risk estimate and not an official flood warning.'
-          );
-        } else if (
-          rainIntensity >= 3 ||
-          precipitationProbability >=
-            50
-        ) {
-          setRiskLevel(
-            'Moderate Risk'
+        if (!aqResponse.ok) {
+          console.warn(
+            `Open-Meteo air-quality request failed: ${aqResponse.status}`
           );
         } else {
-          setRiskLevel(
-            'Low Risk'
-          );
+          const aqText =
+            await aqResponse.text();
+
+          if (!aqText.trim()) {
+            console.warn(
+              'Open-Meteo air-quality API returned an empty response.'
+            );
+          } else {
+            let aqData: any = null;
+
+            try {
+              aqData =
+                JSON.parse(aqText);
+            } catch (parseError) {
+              console.warn(
+                'Open-Meteo air-quality API returned invalid JSON:',
+                parseError
+              );
+            }
+
+            if (aqData?.current) {
+              const usAqi = Number(
+                aqData.current.us_aqi ?? 0
+              );
+
+              const pm25 = Number(
+                aqData.current.pm2_5 ?? 0
+              );
+
+              const pm10 = Number(
+                aqData.current.pm10 ?? 0
+              );
+
+              const aerosolOpticalDepth = Number(
+                aqData.current
+                  .aerosol_optical_depth ?? 0
+              );
+
+              const usAqiLabel =
+                getUsAqiLabel(usAqi);
+
+              setAirQuality({
+                usAqi,
+                pm25,
+                pm10,
+                aerosolOpticalDepth,
+                usAqiLabel,
+              });
+              setHasAirQualityData(true);
+
+              console.log(
+                'Open-Meteo air quality:',
+                {
+                  usAqi,
+                  pm25,
+                  pm10,
+                  aerosolOpticalDepth,
+                  usAqiLabel,
+                }
+              );
+            }
+          }
         }
       } catch (error) {
-        console.error(
-          'Tomorrow.io error:',
+        console.warn(
+          'Open-Meteo air-quality data is temporarily unavailable:',
           error
         );
       }
@@ -961,6 +2356,11 @@ export default function MapScreen() {
         fallbackLocation
       );
 
+      getDisasterEvents(
+        fallbackLocation.latitude,
+        fallbackLocation.longitude
+      );
+
       Alert.alert(
         'Demo Location Used',
         'Current GPS location is unavailable, so the app is using a simulated Singapore location for the prototype demo.'
@@ -969,82 +2369,370 @@ export default function MapScreen() {
   }
 
   // ---------------------------------------------------------
-  // SIMULATED DEMO ALERT
-  // ---------------------------------------------------------
-
-  function triggerFloodAlert() {
-    setShowEmergencyAlert(true);
-
-    Alert.alert(
-      '⚠️ SIMULATED FLOOD ALERT',
-      'Risk Level: High\n\n' +
-        'Your current location is near a simulated flood-risk zone.\n\n' +
-        'Recommended Actions:\n' +
-        '• Move to higher ground\n' +
-        '• Avoid flooded roads\n' +
-        '• Prepare emergency supplies\n' +
-        '• Follow official instructions\n\n' +
-        'Emergency Contact:\n' +
-        '📞 995',
-      [
-        {
-          text: 'Dismiss',
-          style: 'cancel',
-        },
-        {
-          text: 'View Map',
-          onPress: () =>
-            setShowEmergencyAlert(
-              true
-            ),
-        },
-      ]
-    );
-  }
-
-  // ---------------------------------------------------------
   // DIRECTIONS
   // ---------------------------------------------------------
 
-  async function handleDirections(place: any, placeType: 'shelter' | 'hospital') {
-    const latitude = place?.geometry?.location?.lat;
-    const longitude = place?.geometry?.location?.lng;
-
-    if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+  async function handleDirections(
+    place: any,
+    placeType: 'shelter' | 'hospital'
+  ) {
+    if (!location) {
       Alert.alert(
-        'Directions unavailable',
-        `The selected ${placeType} does not have a valid map location.`
+        'Location unavailable',
+        'Your current location is not available yet. Refresh your location and try again.'
       );
       return;
     }
 
-    const label = encodeURIComponent(
-      place?.name ?? (placeType === 'shelter' ? 'Prototype Shelter' : 'Hospital')
-    );
+    const placeId =
+      String(place?.place_id ?? '');
 
-    const googleMapsUrl =
-      `https://www.google.com/maps/dir/?api=1` +
-      `&destination=${latitude},${longitude}` +
-      `&destination_place_id=${place?.place_id ?? ''}` +
-      `&travelmode=driving`;
+    if (!placeId) {
+      Alert.alert(
+        'Directions unavailable',
+        'Google Places did not return a valid Place ID for this location, so Alerta Ready will not guess the destination.'
+      );
+      return;
+    }
 
     try {
-      const supported = await Linking.canOpenURL(googleMapsUrl);
+      // -----------------------------------------------------
+      // 1. REFRESH ORIGIN
+      // -----------------------------------------------------
+      // Use the latest emulator/device GPS coordinates rather than
+      // relying on an older location value stored in state.
+      let originLatitude =
+        location.latitude;
 
-      if (!supported) {
+      let originLongitude =
+        location.longitude;
+
+      try {
+        const freshLocation =
+          await Location.getCurrentPositionAsync({
+            accuracy:
+              Location.Accuracy.Balanced,
+          });
+
+        originLatitude =
+          freshLocation.coords.latitude;
+
+        originLongitude =
+          freshLocation.coords.longitude;
+
+        setLocation(
+          freshLocation.coords
+        );
+      } catch (locationError) {
+        console.warn(
+          'Could not refresh location before directions. Using current map location.',
+          locationError
+        );
+      }
+
+      // -----------------------------------------------------
+      // 2. VERIFY THE SELECTED GOOGLE PLACE
+      // -----------------------------------------------------
+      // Nearby Search is used for discovery, but before opening
+      // directions we resolve the Place ID again with Place Details.
+      // This gives us Google's canonical name, address and coordinates.
+      const detailsResponse =
+        await fetch(
+          `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(
+            placeId
+          )}&fields=place_id,name,formatted_address,geometry,business_status,types&key=${GOOGLE_PLACES_API_KEY}`
+        );
+
+      const detailsData =
+        await detailsResponse.json();
+
+      if (
+        detailsData?.status !== 'OK' ||
+        !detailsData?.result
+      ) {
+        console.warn(
+          'Google Place Details failed:',
+          detailsData?.status,
+          detailsData?.error_message ?? ''
+        );
+
         Alert.alert(
           'Directions unavailable',
-          `Unable to open directions to ${decodeURIComponent(label)}.`
+          'Google Maps could not verify this emergency location.'
         );
         return;
       }
 
-      await Linking.openURL(googleMapsUrl);
+      const verifiedPlace =
+        detailsData.result;
+
+      const destinationLatitude =
+        Number(
+          verifiedPlace?.geometry
+            ?.location?.lat
+        );
+
+      const destinationLongitude =
+        Number(
+          verifiedPlace?.geometry
+            ?.location?.lng
+        );
+
+      if (
+        !Number.isFinite(
+          destinationLatitude
+        ) ||
+        !Number.isFinite(
+          destinationLongitude
+        )
+      ) {
+        Alert.alert(
+          'Directions unavailable',
+          'Google Maps did not return valid coordinates for this place.'
+        );
+        return;
+      }
+
+      // -----------------------------------------------------
+      // 3. VALIDATE CATEGORY AGAIN
+      // -----------------------------------------------------
+      if (
+        placeType === 'hospital'
+      ) {
+        const verifiedTypes =
+          Array.isArray(
+            verifiedPlace?.types
+          )
+            ? verifiedPlace.types
+            : [];
+
+        if (
+          !verifiedTypes.includes(
+            'hospital'
+          )
+        ) {
+          Alert.alert(
+            'Location not verified',
+            `${verifiedPlace?.name ?? 'This place'} is not classified as a hospital by Google Places.`
+          );
+          return;
+        }
+      }
+
+      if (
+        placeType === 'shelter'
+      ) {
+        const shelterCandidate = {
+          ...verifiedPlace,
+          vicinity:
+            verifiedPlace
+              ?.formatted_address ??
+            '',
+        };
+
+        if (
+          !isLikelyEmergencyShelter(
+            shelterCandidate
+          )
+        ) {
+          Alert.alert(
+            'Location not verified',
+            `${verifiedPlace?.name ?? 'This place'} could not be verified as an emergency or evacuation shelter.`
+          );
+          return;
+        }
+      }
+
+      // -----------------------------------------------------
+      // 4. DISTANCE SANITY CHECK
+      // -----------------------------------------------------
+      const distanceKm =
+        getDistanceInMeters(
+          originLatitude,
+          originLongitude,
+          destinationLatitude,
+          destinationLongitude
+        ) / 1000;
+
+      if (
+        distanceKm >
+        EMERGENCY_LOCATION_MAX_KM
+      ) {
+        Alert.alert(
+          'Directions unavailable',
+          `This ${placeType} is ${distanceKm.toFixed(
+            1
+          )} km away, so it is outside Alerta Ready's nearby-location range.`
+        );
+        return;
+      }
+
+      const verifiedName =
+        String(
+          verifiedPlace?.name ??
+            (placeType === 'shelter'
+              ? 'Emergency / evacuation shelter'
+              : 'Hospital')
+        );
+
+      const verifiedAddress =
+        String(
+          verifiedPlace
+            ?.formatted_address ??
+            'Address unavailable'
+        );
+
+      /*
+       * Use BOTH:
+       * - explicit current GPS coordinates for the origin
+       * - Google's verified Place ID for the destination
+       *
+       * A raw destination lat/lng can be reverse-geocoded by Google
+       * Maps to a nearby Plus Code or road. A Place ID identifies the
+       * actual POI/business/facility selected from Google Places.
+       */
+      const googleMapsUrl =
+        `https://www.google.com/maps/dir/?api=1` +
+        `&origin=${originLatitude},${originLongitude}` +
+        `&destination=${encodeURIComponent(
+          verifiedName
+        )}` +
+        `&destination_place_id=${encodeURIComponent(
+          placeId
+        )}` +
+        `&travelmode=driving`;
+
+      console.log(
+        'Verified Google Maps destination:',
+        {
+          placeType,
+          placeId,
+          name:
+            verifiedName,
+          address:
+            verifiedAddress,
+          origin: {
+            latitude:
+              originLatitude,
+            longitude:
+              originLongitude,
+          },
+          destination: {
+            latitude:
+              destinationLatitude,
+            longitude:
+              destinationLongitude,
+          },
+          distanceKm,
+        }
+      );
+
+      // If Google says the destination is essentially at the current
+      // GPS point, don't pretend there is a route to travel.
+      if (distanceKm < 0.03) {
+        Alert.alert(
+          verifiedName,
+          `${verifiedAddress}\n\nThis place is within about 30 m of your current GPS location, so Google Maps may show a 0 m route.`,
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+            },
+            {
+              text: 'Open in Maps',
+              onPress: async () => {
+                const placeUrl =
+                  `https://www.google.com/maps/search/?api=1` +
+                  `&query=${encodeURIComponent(
+                    verifiedName
+                  )}` +
+                  `&query_place_id=${encodeURIComponent(
+                    placeId
+                  )}`;
+
+                await Linking.openURL(
+                  placeUrl
+                );
+              },
+            },
+          ]
+        );
+        return;
+      }
+
+      const supported =
+        await Linking.canOpenURL(
+          googleMapsUrl
+        );
+
+      if (!supported) {
+        Alert.alert(
+          'Directions unavailable',
+          `Unable to open directions to ${verifiedName}.`
+        );
+        return;
+      }
+
+      await Linking.openURL(
+        googleMapsUrl
+      );
     } catch (error) {
-      console.error('Directions error:', error);
+      console.error(
+        'Directions verification error:',
+        error
+      );
+
       Alert.alert(
         'Directions unavailable',
-        'Google Maps directions could not be opened.'
+        'Alerta Ready could not verify this destination with Google Maps.'
+      );
+    }
+  }
+
+  async function searchEmergencyLocationInMaps(
+    placeType: 'shelter' | 'hospital'
+  ) {
+    if (!location) {
+      Alert.alert(
+        'Location unavailable',
+        'Refresh your current location and try again.'
+      );
+      return;
+    }
+
+    const query =
+      placeType === 'shelter'
+        ? 'evacuation center emergency shelter'
+        : 'hospital';
+
+    // Use an Android geo URI so Google Maps biases the search around
+    // the same coordinates currently shown in Alerta Ready.
+    const mapsUrl =
+      `geo:${location.latitude},${location.longitude}` +
+      `?q=${encodeURIComponent(query)}`;
+
+    try {
+      const supported =
+        await Linking.canOpenURL(mapsUrl);
+
+      if (!supported) {
+        Alert.alert(
+          'Maps search unavailable',
+          'Google Maps could not be opened.'
+        );
+        return;
+      }
+
+      await Linking.openURL(mapsUrl);
+    } catch (error) {
+      console.warn(
+        'Google Maps search error:',
+        error
+      );
+
+      Alert.alert(
+        'Maps search unavailable',
+        'Unable to search Google Maps for this emergency location.'
       );
     }
   }
@@ -1100,7 +2788,11 @@ export default function MapScreen() {
       ? nearestEarthquake
       : null;
 
-  const hasWeatherHazard = riskLevel === 'High Risk';
+  const hasWeatherHazard =
+    riskLevel === 'High Risk';
+
+  const hasLocalAirQualityHazard =
+    airQuality.usAqi >= 151;
 
   const filteredNearbyEonetHazard =
     nearbyEonetHazard &&
@@ -1120,7 +2812,11 @@ export default function MapScreen() {
 
   const filteredWeatherHazard =
     hasWeatherHazard &&
-    mapFilters.weather;
+    mapFilters.weatherRisk;
+
+  const filteredLocalAirQualityHazard =
+    hasLocalAirQualityHazard &&
+    mapFilters.airQuality;
 
   const activeHazard = filteredNearbyEonetHazard
     ? {
@@ -1140,48 +2836,117 @@ export default function MapScreen() {
           longitude: filteredNearbyEarthquakeHazard.longitude,
           source: 'USGS',
         }
-      : filteredWeatherHazard
+      : filteredLocalAirQualityHazard
         ? {
-            type: 'Severe Weather',
-            title: 'Severe weather risk detected',
-            detail: 'Heavy rainfall conditions detected near your current location',
+            type: 'Air Quality',
+            title: `AQI ${Math.round(
+              airQuality.usAqi
+            )} • ${airQuality.usAqiLabel}`, 
+            detail:
+              `PM2.5 ${airQuality.pm25.toFixed(1)} µg/m³ • ` +
+              `PM10 ${airQuality.pm10.toFixed(1)} µg/m³ • ` +
+              `AOD ${airQuality.aerosolOpticalDepth.toFixed(2)}`,
             latitude: location.latitude,
             longitude: location.longitude,
-            source: 'Tomorrow.io',
+            source: 'Open-Meteo / CAMS',
           }
-        : null;
+        : filteredWeatherHazard
+          ? {
+              type: 'Weather Risk',
+              title: 'High weather-risk conditions detected',
+              detail: weatherRiskDetails,
+              latitude: location.latitude,
+              longitude: location.longitude,
+              source: 'Open-Meteo',
+            }
+          : null;
 
-  const nearestShelter = shelters
-    .map((place) => {
-      const latitude = place?.geometry?.location?.lat;
-      const longitude = place?.geometry?.location?.lng;
-      if (typeof latitude !== 'number' || typeof longitude !== 'number') return null;
-      return {
-        ...place,
-        distanceKm:
-          getDistanceInMeters(location.latitude, location.longitude, latitude, longitude) / 1000,
-      };
-    })
-    .filter((place) => place !== null)
-    .sort((a, b) => a!.distanceKm - b!.distanceKm)[0] ?? null;
+  const nearestShelter =
+    shelters
+      .map((place) => {
+        const latitude =
+          place?.geometry?.location?.lat;
 
-  const nearestHospital = hospitals
-    .map((place) => {
-      const latitude = place?.geometry?.location?.lat;
-      const longitude = place?.geometry?.location?.lng;
-      if (typeof latitude !== 'number' || typeof longitude !== 'number') return null;
-      return {
-        ...place,
-        distanceKm:
-          getDistanceInMeters(location.latitude, location.longitude, latitude, longitude) / 1000,
-      };
-    })
-    .filter((place) => place !== null)
-    .sort((a, b) => a!.distanceKm - b!.distanceKm)[0] ?? null;
+        const longitude =
+          place?.geometry?.location?.lng;
+
+        if (
+          typeof latitude !== 'number' ||
+          typeof longitude !== 'number'
+        ) {
+          return null;
+        }
+
+        const distanceKm =
+          getDistanceInMeters(
+            location.latitude,
+            location.longitude,
+            latitude,
+            longitude
+          ) / 1000;
+
+        return {
+          ...place,
+          distanceKm,
+        };
+      })
+      .filter(
+        (place) =>
+          place !== null &&
+          place.distanceKm <=
+            EMERGENCY_LOCATION_MAX_KM
+      )
+      .sort(
+        (a, b) =>
+          a!.distanceKm -
+          b!.distanceKm
+      )[0] ?? null;
+
+  const nearestHospital =
+    hospitals
+      .map((place) => {
+        const latitude =
+          place?.geometry?.location?.lat;
+
+        const longitude =
+          place?.geometry?.location?.lng;
+
+        if (
+          typeof latitude !== 'number' ||
+          typeof longitude !== 'number'
+        ) {
+          return null;
+        }
+
+        const distanceKm =
+          getDistanceInMeters(
+            location.latitude,
+            location.longitude,
+            latitude,
+            longitude
+          ) / 1000;
+
+        return {
+          ...place,
+          distanceKm,
+        };
+      })
+      .filter(
+        (place) =>
+          place !== null &&
+          place.distanceKm <=
+            EMERGENCY_LOCATION_MAX_KM
+      )
+      .sort(
+        (a, b) =>
+          a!.distanceKm -
+          b!.distanceKm
+      )[0] ?? null;
 
   // App-defined range used only for the "Nearest" display cards.
   // It is not an official warning or evacuation radius.
-  const MONITORED_HAZARD_RANGE_KM = 500;
+  const MONITORED_HAZARD_RANGE_KM =
+    NEARBY_FILTER_RADIUS_KM;
 
   const getNearestCardForFilter = (filter: MapFilter) => {
     const option =
@@ -1200,12 +2965,32 @@ export default function MapScreen() {
           ? nearestEarthquake
           : null;
 
+      const originalEarthquake =
+        earthquake
+          ? earthquakes.find(
+              (item) =>
+                item?.id ===
+                earthquake.id
+            )
+          : null;
+
+      const hazardDetail =
+        earthquake &&
+        originalEarthquake
+          ? buildEarthquakeHazardDetail(
+              originalEarthquake,
+              earthquake.latitude,
+              earthquake.longitude,
+              earthquake.distanceKm
+            )
+          : null;
+
       return {
         key: filter,
         label:
           option?.label ??
           getHazardFilterPluralLabel(filter),
-        icon: option?.icon ?? '🌋',
+        icon: option?.icon ?? '〰️',
         count: option?.count ?? 0,
         palette,
         source: 'USGS',
@@ -1216,13 +3001,32 @@ export default function MapScreen() {
         distanceText: earthquake
           ? `${earthquake.distanceKm.toFixed(0)} km away`
           : '',
+        hazardDetail,
       };
     }
 
-    if (filter === 'weather') {
+    if (filter === 'weatherRisk') {
       const weatherAvailable =
-        riskLevel === 'Moderate Risk' ||
-        riskLevel === 'High Risk';
+        riskLevel !== 'Unavailable';
+
+      const hazardDetail: SelectedHazardDetail | null =
+        weatherAvailable
+          ? {
+              id: 'local-weather-risk',
+              filterKey: 'weatherRisk',
+              icon: '🌦️',
+              category: 'Local Weather Risk',
+              title: `Weather risk: ${riskLevel}`,
+              source: 'Open-Meteo • Alerta Ready-derived',
+              latitude: location.latitude,
+              longitude: location.longitude,
+              distanceText: 'At your location',
+              detailLines: [
+                weatherRiskDetails,
+                'This is an Alerta Ready risk classification, not an official weather warning.',
+              ],
+            }
+          : null;
 
       return {
         key: filter,
@@ -1232,14 +3036,57 @@ export default function MapScreen() {
         icon: option?.icon ?? '🌦️',
         count: option?.count ?? riskLevel,
         palette,
-        source: 'Tomorrow.io',
+        source: 'Open-Meteo • app-derived',
         available: weatherAvailable,
-        title: weatherAvailable
-          ? `${riskLevel} weather`
+        title: `Weather risk: ${riskLevel}`,
+        distanceText: 'At your location',
+        hazardDetail,
+      };
+    }
+
+    if (filter === 'airQuality') {
+      const airQualityAvailable =
+        hasAirQualityData;
+
+      const hazardDetail: SelectedHazardDetail | null =
+        airQualityAvailable
+          ? {
+              id: 'local-air-quality',
+              filterKey: 'airQuality',
+              icon: '🌫️',
+              category: 'Air Quality / Haze',
+              title: `AQI ${Math.round(
+                airQuality.usAqi
+              )} • ${airQuality.usAqiLabel}`,
+              source: 'Open-Meteo / CAMS',
+              latitude: location.latitude,
+              longitude: location.longitude,
+              distanceText: 'At your location',
+              detailLines: [
+                `PM2.5: ${airQuality.pm25.toFixed(1)} µg/m³`,
+                `PM10: ${airQuality.pm10.toFixed(1)} µg/m³`,
+                `Aerosol optical depth: ${airQuality.aerosolOpticalDepth.toFixed(2)}`,
+              ],
+            }
+          : null;
+
+      return {
+        key: filter,
+        label: option?.label ?? 'Air Quality / Haze',
+        icon: '🌫️',
+        count: airQualityAvailable
+          ? `AQI ${Math.round(airQuality.usAqi)}`
+          : '--',
+        palette,
+        source: 'Open-Meteo / CAMS',
+        available: airQualityAvailable,
+        title: airQualityAvailable
+          ? `AQI ${Math.round(airQuality.usAqi)} • ${airQuality.usAqiLabel}`
           : '',
-        distanceText: weatherAvailable
-          ? 'At your location'
+        distanceText: airQualityAvailable
+          ? `PM2.5 ${airQuality.pm25.toFixed(1)} µg/m³ • PM10 ${airQuality.pm10.toFixed(1)} µg/m³`
           : '',
+        hazardDetail,
       };
     }
 
@@ -1251,6 +3098,25 @@ export default function MapScreen() {
       event.distanceKm <=
         MONITORED_HAZARD_RANGE_KM
         ? event
+        : null;
+
+    const originalEvent =
+      nearbyEvent
+        ? disasterEvents.find(
+            (item) =>
+              item?.id === nearbyEvent.id
+          )
+        : null;
+
+    const hazardDetail =
+      nearbyEvent &&
+      originalEvent
+        ? buildEonetHazardDetail(
+            originalEvent,
+            nearbyEvent.latitude,
+            nearbyEvent.longitude,
+            nearbyEvent.distanceKm
+          )
         : null;
 
     return {
@@ -1277,6 +3143,7 @@ export default function MapScreen() {
       distanceText: nearbyEvent
         ? `${nearbyEvent.distanceKm.toFixed(0)} km away`
         : '',
+      hazardDetail,
     };
   };
 
@@ -1290,12 +3157,12 @@ export default function MapScreen() {
 
   const nearestHazardSectionTitle =
     visibleHazardFilterOptions.length === 0
-      ? 'Nearest monitored hazards'
+      ? 'Nearest monitored hazards & conditions'
       : visibleHazardFilterOptions.length === 1
         ? `Nearest ${visibleHazardFilterOptions[0].label}`
         : visibleHazardFilterOptions.length === 2
           ? `Nearest ${visibleHazardFilterOptions[0].label} & ${visibleHazardFilterOptions[1].label}`
-          : 'Nearest selected hazards';
+          : 'Nearest selected hazards & conditions';
 
   // ---------------------------------------------------------
   // UI
@@ -1307,7 +3174,7 @@ export default function MapScreen() {
       <View style={styles.compactHeader}>
         <View>
           <Text style={styles.title}>Emergency Map</Text>
-          <Text style={styles.subtitle}>Live hazard information near you</Text>
+          <Text style={styles.subtitle}>Live hazard & condition information near you</Text>
         </View>
 
         <View style={styles.liveHeaderBadge}>
@@ -1318,7 +3185,14 @@ export default function MapScreen() {
 
       <View style={styles.mapArea}>
         <MapView
+        ref={mapRef}
         style={styles.map}
+        mapType="standard"
+        showsBuildings
+        showsPointsOfInterests
+        showsCompass
+        showsScale
+        loadingEnabled
         initialRegion={{
           latitude:
             location.latitude,
@@ -1347,7 +3221,7 @@ export default function MapScreen() {
         />
 
         {/* ------------------------------------------------ */}
-        {/* PROTOTYPE SHELTER LOCATIONS                      */}
+        {/* GOOGLE PLACES SHELTER CANDIDATES                      */}
         {/* ------------------------------------------------ */}
 
         {mapFilters.shelters &&
@@ -1380,7 +3254,7 @@ export default function MapScreen() {
                 title={
                   shelter.name
                 }
-                description={`Prototype shelter location • ${
+                description={`Mapped emergency / evacuation shelter • ${
                   shelter.vicinity ??
                   'Location available'
                 }`}
@@ -1509,6 +3383,10 @@ export default function MapScreen() {
                 longitude
               ) / 1000;
 
+            if (distanceKm > NEARBY_FILTER_RADIUS_KM) {
+              return null;
+            }
+
             return (
               <Marker
                 key={`disaster-${event.id}`}
@@ -1516,10 +3394,16 @@ export default function MapScreen() {
                   latitude,
                   longitude,
                 }}
-                title={`⚠️ ${event.title}`}
-                description={`${category} • ${distanceKm.toFixed(
-                  0
-                )} km away • NASA EONET`}
+                onPress={() =>
+                  focusSelectedHazard(
+                    buildEonetHazardDetail(
+                      event,
+                      latitude,
+                      longitude,
+                      distanceKm
+                    )
+                  )
+                }
                 pinColor={getEonetMarkerColor(category)}
               />
             );
@@ -1556,9 +3440,6 @@ export default function MapScreen() {
             const latitude =
               coordinates[1];
 
-            const depth =
-              coordinates[2];
-
             if (
               typeof latitude !==
                 'number' ||
@@ -1568,20 +3449,6 @@ export default function MapScreen() {
               return null;
             }
 
-            const magnitude =
-              earthquake
-                ?.properties?.mag ??
-              0;
-
-            const place =
-              earthquake
-                ?.properties?.place ??
-              'Unknown location';
-
-            const time =
-              earthquake
-                ?.properties?.time;
-
             const distanceKm =
               getDistanceInMeters(
                 location.latitude,
@@ -1590,18 +3457,9 @@ export default function MapScreen() {
                 longitude
               ) / 1000;
 
-            const earthquakeTime =
-              time
-                ? new Date(
-                    time
-                  ).toLocaleString()
-                : 'Unknown time';
-
-            const depthText =
-              typeof depth ===
-              'number'
-                ? depth.toFixed(1)
-                : 'Unknown';
+            if (distanceKm > NEARBY_FILTER_RADIUS_KM) {
+              return null;
+            }
 
             return (
               <Marker
@@ -1610,14 +3468,15 @@ export default function MapScreen() {
                   latitude,
                   longitude,
                 }}
-                title={`🌋 M${magnitude} Earthquake`}
-                description={
-                  `${place} • ` +
-                  `Depth: ${depthText} km • ` +
-                  `${distanceKm.toFixed(
-                    0
-                  )} km away • ` +
-                  `${earthquakeTime} • USGS`
+                onPress={() =>
+                  focusSelectedHazard(
+                    buildEarthquakeHazardDetail(
+                      earthquake,
+                      latitude,
+                      longitude,
+                      distanceKm
+                    )
+                  )
                 }
                 pinColor="purple"
               />
@@ -1625,23 +3484,38 @@ export default function MapScreen() {
           }
         )}
 
-        {/* App-defined proximity visualization for an active detected hazard. */}
-        {activeHazard &&
-          ((activeHazard.type === 'Natural Event' && nearbyEonetHazard && mapFilters[getEonetFilterKey(nearbyEonetHazard.category)]) ||
-            (activeHazard.type === 'Earthquake' && mapFilters.earthquakes) ||
-            (activeHazard.type === 'Severe Weather' && mapFilters.weather)) && (
-          <Circle
-            center={{
-              latitude: activeHazard.latitude,
-              longitude: activeHazard.longitude,
-            }}
-            radius={activeHazard.type === 'Earthquake' ? 10000 : 5000}
-            fillColor="rgba(220, 38, 38, 0.13)"
-            strokeColor="rgba(220, 38, 38, 0.50)"
-            strokeWidth={2}
-          />
-        )}
         </MapView>
+
+        <Pressable
+          style={
+            styles.recenterButton
+          }
+          onPress={() =>
+            getUserLocation()
+          }
+          accessibilityLabel="Refresh current location"
+        >
+          <Text
+            style={
+              styles.recenterButtonIcon
+            }
+          >
+            ◎
+          </Text>
+        </Pressable>
+
+        {!selectedHazard && (
+          <View
+            style={styles.mapLocationChip}
+          >
+            <Text
+              style={styles.mapLocationChipText}
+              numberOfLines={1}
+            >
+              📍 {location.latitude.toFixed(4)}, {location.longitude.toFixed(4)}
+            </Text>
+          </View>
+        )}
 
         {/* Active hazard chips can be swiped horizontally. */}
         <View style={styles.hazardTypeBar}>
@@ -1724,38 +3598,117 @@ export default function MapScreen() {
           >
             <Text style={styles.filtersButtonIcon}>☷</Text>
             <Text style={styles.filtersButtonText}>
-              Filters
+              Filters ({Object.values(mapFilters).filter(Boolean).length})
             </Text>
           </Pressable>
         </View>
 
-        {/* Bottom sheet changes when a relevant hazard is detected. */}
-        <View style={[styles.bottomSheet, activeHazard && styles.bottomSheetAlert]}>
+        {selectedHazard && (
+          <View style={styles.selectedHazardFloatingCard}>
+            <View style={styles.selectedHazardHeader}>
+              <View style={styles.selectedHazardTitleRow}>
+                <View style={styles.selectedHazardIconBox}>
+                  <Text style={styles.selectedHazardIcon}>
+                    {selectedHazard.icon}
+                  </Text>
+                </View>
+
+                <View style={styles.selectedHazardTitleWrap}>
+                  <Text style={styles.selectedHazardCategory}>
+                    {selectedHazard.category}
+                  </Text>
+                  <Text
+                    style={styles.selectedHazardTitle}
+                    numberOfLines={2}
+                  >
+                    {selectedHazard.title}
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                style={styles.selectedHazardCloseButton}
+                onPress={closeSelectedHazard}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel="Close hazard information"
+              >
+                <Text style={styles.selectedHazardCloseText}>
+                  ×
+                </Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.selectedHazardSource}>
+              Source: {selectedHazard.source}
+            </Text>
+
+            {selectedHazard.detailLines
+              .slice(0, 3)
+              .map((line, index) => (
+                <Text
+                  key={`${selectedHazard.id}-detail-${index}`}
+                  style={styles.selectedHazardDetail}
+                  numberOfLines={index === 2 ? 2 : 1}
+                >
+                  {line}
+                </Text>
+              ))}
+
+            <View style={styles.selectedHazardLocationRow}>
+              <Text
+                style={styles.selectedHazardCoordinates}
+                numberOfLines={1}
+              >
+                📍 {selectedHazard.latitude.toFixed(4)}, {selectedHazard.longitude.toFixed(4)}
+              </Text>
+
+              <Text style={styles.selectedHazardDistance}>
+                {selectedHazard.distanceText}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {/*
+          Keep the map uncluttered while the user is inspecting a selected
+          hazard. Closing the floating hazard card restores the normal bottom
+          sheet with emergency facilities and nearest-hazard cards.
+        */}
+        {!selectedHazard && (
+          <View style={[styles.bottomSheet, activeHazard && styles.bottomSheetAlert]}>
           <View style={styles.sheetHandle} />
 
           {activeHazard ? (
             <>
               <View style={styles.activeWarningCard}>
                 <Text style={styles.activeWarningTitle}>
-                  ⚠️ {activeHazard.type} warning active
+                  ⚠️ {activeHazard.type} detected
                 </Text>
                 <Text style={styles.activeWarningText}>{activeHazard.title}</Text>
                 <Text style={styles.activeWarningDetail}>{activeHazard.detail}</Text>
                 <Text style={styles.activeWarningSource}>
-                  Source: {activeHazard.source} • Alerta Ready proximity rule
+                  Source: {activeHazard.source} • Alerta Ready relevance rule — not an official warning
                 </Text>
               </View>
 
               <Pressable
                 style={[
                   styles.alertDirectionButton,
-                  !nearestShelter && styles.directionButtonDisabled,
+                  !nearestShelter && {
+                    backgroundColor: '#374151',
+                  },
                 ]}
-                disabled={!nearestShelter}
-                onPress={() => nearestShelter && handleDirections(nearestShelter, 'shelter')}
+                onPress={() =>
+                  nearestShelter
+                    ? handleDirections(nearestShelter, 'shelter')
+                    : searchEmergencyLocationInMaps('shelter')
+                }
               >
                 <Text style={styles.alertDirectionButtonText}>
-                  📍 Get Directions to nearest shelter
+                  {nearestShelter
+                    ? '📍 Directions to nearest mapped shelter'
+                    : '🔎 Search shelter locations in Google Maps'}
                 </Text>
               </Pressable>
 
@@ -1763,9 +3716,11 @@ export default function MapScreen() {
                 <View style={styles.responseCard}>
                   <Text style={styles.responseIcon}>🏠</Text>
                   <Text style={styles.responseValue}>
-                    {nearestShelter ? `${nearestShelter.distanceKm.toFixed(1)} km` : '--'}
+                    {nearestShelter ? formatDistance(nearestShelter.distanceKm) : '--'}
                   </Text>
-                  <Text style={styles.responseLabel}>Nearest prototype shelter</Text>
+                  <Text style={styles.responseLabel}>
+                    Nearest mapped shelter
+                  </Text>
                   {nearestShelter && (
                     <>
                       <Text style={styles.responseDetail} numberOfLines={1}>
@@ -1784,7 +3739,7 @@ export default function MapScreen() {
                 <View style={styles.responseCard}>
                   <Text style={styles.responseIcon}>🏥</Text>
                   <Text style={styles.responseValue}>
-                    {nearestHospital ? `${nearestHospital.distanceKm.toFixed(1)} km` : '--'}
+                    {nearestHospital ? formatDistance(nearestHospital.distanceKm) : '--'}
                   </Text>
                   <Text style={styles.responseLabel}>Nearest hospital</Text>
                   {nearestHospital && (
@@ -1811,45 +3766,40 @@ export default function MapScreen() {
               <View
                 style={[
                   styles.compactStatusBanner,
-                  riskLevel === 'Moderate Risk'
-                    ? styles.compactStatusBannerModerate
-                    : styles.compactStatusBannerLow,
+                  styles.compactStatusBannerLow,
                 ]}
               >
                 <Text
                   style={[
                     styles.compactStatusIcon,
-                    riskLevel === 'Moderate Risk'
-                      ? styles.compactStatusIconModerate
-                      : styles.compactStatusIconLow,
+                    styles.compactStatusIconLow,
                   ]}
                 >
-                  {riskLevel === 'Moderate Risk' ? '!' : '✓'}
+                  ✓
                 </Text>
 
-                <Text style={styles.compactStatusText} numberOfLines={1}>
-                  {riskLevel === 'Moderate Risk'
-                    ? 'Moderate weather risk nearby'
-                    : 'No immediate hazard nearby'}
+                <Text
+                  style={
+                    styles.compactStatusText
+                  }
+                  numberOfLines={1}
+                >
+                  No immediate map hazard nearby
                 </Text>
 
                 <View
                   style={[
                     styles.compactRiskPill,
-                    riskLevel === 'Moderate Risk'
-                      ? styles.compactRiskPillModerate
-                      : styles.compactRiskPillLow,
+                    styles.compactRiskPillLow,
                   ]}
                 >
                   <Text
                     style={[
                       styles.compactRiskPillText,
-                      riskLevel === 'Moderate Risk'
-                        ? styles.compactRiskPillTextModerate
-                        : styles.compactRiskPillTextLow,
+                      styles.compactRiskPillTextLow,
                     ]}
                   >
-                    {riskLevel}
+                    Map Clear
                   </Text>
                 </View>
               </View>
@@ -1858,7 +3808,7 @@ export default function MapScreen() {
               {/* NEARBY EMERGENCY LOCATIONS                       */}
               {/* ------------------------------------------------ */}
               <Text style={styles.compactSectionTitle}>
-                Nearby emergency locations
+                Nearby emergency facilities
               </Text>
 
               <View style={styles.compactLocationCard}>
@@ -1869,29 +3819,42 @@ export default function MapScreen() {
 
                   <View style={styles.compactLocationTextWrap}>
                     <Text style={styles.compactLocationName} numberOfLines={1}>
-                      {nearestShelter?.name ?? 'No shelter available'}
+                      {nearestShelter?.name ?? 'No mapped shelter found'}
                     </Text>
                     <Text style={styles.compactLocationMeta} numberOfLines={1}>
                       {nearestShelter
-                        ? `Shelter · ${nearestShelter.distanceKm.toFixed(1)} km away`
-                        : 'Prototype shelter information unavailable'}
+                        ? `Emergency / evacuation shelter · ${formatDistance(
+                            nearestShelter.distanceKm
+                          )} away`
+                        : 'No verified mapped emergency shelter found within 50 km'}
                     </Text>
                   </View>
                 </View>
 
                 <Pressable
-                  disabled={!nearestShelter}
                   onPress={() =>
-                    nearestShelter &&
-                    handleDirections(nearestShelter, 'shelter')
+                    nearestShelter
+                      ? handleDirections(nearestShelter, 'shelter')
+                      : searchEmergencyLocationInMaps('shelter')
                   }
                   style={[
                     styles.compactShelterDirectionsButton,
-                    !nearestShelter && styles.compactDirectionDisabled,
+                    !nearestShelter && {
+                      backgroundColor: '#E5E7EB',
+                    },
                   ]}
                 >
-                  <Text style={styles.compactShelterDirectionsText}>
-                    Directions
+                  <Text
+                    style={[
+                      styles.compactShelterDirectionsText,
+                      !nearestShelter && {
+                        color: '#374151',
+                      },
+                    ]}
+                  >
+                    {nearestShelter
+                      ? 'Directions'
+                      : 'Search Maps'}
                   </Text>
                 </Pressable>
               </View>
@@ -1904,29 +3867,40 @@ export default function MapScreen() {
 
                   <View style={styles.compactLocationTextWrap}>
                     <Text style={styles.compactLocationName} numberOfLines={1}>
-                      {nearestHospital?.name ?? 'No hospital available'}
+                      {nearestHospital?.name ?? 'No hospital found'}
                     </Text>
                     <Text style={styles.compactLocationMeta} numberOfLines={1}>
                       {nearestHospital
-                        ? `Hospital · ${nearestHospital.distanceKm.toFixed(1)} km away`
-                        : 'Hospital information unavailable'}
+                        ? `Hospital · ${formatDistance(nearestHospital.distanceKm)} away`
+                        : 'No hospital found within 50 km'}
                     </Text>
                   </View>
                 </View>
 
                 <Pressable
-                  disabled={!nearestHospital}
                   onPress={() =>
-                    nearestHospital &&
-                    handleDirections(nearestHospital, 'hospital')
+                    nearestHospital
+                      ? handleDirections(nearestHospital, 'hospital')
+                      : searchEmergencyLocationInMaps('hospital')
                   }
                   style={[
                     styles.compactHospitalDirectionsButton,
-                    !nearestHospital && styles.compactDirectionDisabled,
+                    !nearestHospital && {
+                      backgroundColor: '#E5E7EB',
+                    },
                   ]}
                 >
-                  <Text style={styles.compactHospitalDirectionsText}>
-                    Directions
+                  <Text
+                    style={[
+                      styles.compactHospitalDirectionsText,
+                      !nearestHospital && {
+                        color: '#374151',
+                      },
+                    ]}
+                  >
+                    {nearestHospital
+                      ? 'Directions'
+                      : 'Search Maps'}
                   </Text>
                 </Pressable>
               </View>
@@ -1947,7 +3921,7 @@ export default function MapScreen() {
                     No hazard filters selected
                   </Text>
                   <Text style={styles.filteredHazardEmptySubtitle}>
-                    Choose hazards from Filters to monitor nearby events
+                    Choose event or condition filters to monitor nearby data
                   </Text>
                 </View>
               ) : displayedNearestHazards.length === 1 &&
@@ -1976,10 +3950,24 @@ export default function MapScreen() {
                   decelerationRate="fast"
                 >
                   {displayedNearestHazards.map((item) => (
-                    <View
+                    <Pressable
                       key={item.key}
+                      disabled={
+                        !item.available ||
+                        !item.hazardDetail
+                      }
+                      onPress={() => {
+                        if (item.hazardDetail) {
+                          focusSelectedHazard(
+                            item.hazardDetail
+                          );
+                        }
+                      }}
                       style={[
                         styles.filteredHazardCard,
+                        item.available &&
+                          styles.filteredHazardCardPressable,
+
                         {
                           backgroundColor:
                             item.available
@@ -2030,6 +4018,18 @@ export default function MapScreen() {
                           >
                             {item.distanceText}
                           </Text>
+
+                          <Text
+                            style={[
+                              styles.filteredHazardCardTapHint,
+                              {
+                                color:
+                                  item.palette.text,
+                              },
+                            ]}
+                          >
+                            Tap to locate
+                          </Text>
                         </>
                       ) : (
                         <View style={styles.filteredMiniEmptyState}>
@@ -2046,17 +4046,18 @@ export default function MapScreen() {
                           </Text>
                         </View>
                       )}
-                    </View>
+                    </Pressable>
                   ))}
                 </ScrollView>
               )}
 
               <Text style={styles.compactDataSourceText}>
-                Live data from NASA EONET, USGS and Tomorrow.io
+                Sources: NASA EONET open Point events • USGS M2.5+ (past 24h) • Open-Meteo/CAMS • Google Places
               </Text>
             </>
           )}
-        </View>
+          </View>
+        )}
       </View>
 
       <Modal
@@ -2082,53 +4083,83 @@ export default function MapScreen() {
               contentContainerStyle={styles.filterSheetScrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {filterOptions.map((option) => {
+              {filterOptions.map((option, index) => {
+                const previousGroup =
+                  index > 0
+                    ? filterOptions[index - 1].group
+                    : null;
+
+                const showGroupTitle =
+                  option.group !== previousGroup;
+
                 return (
-                  <View
-                    key={option.key}
-                    style={styles.filterRow}
-                  >
-                    <View style={styles.filterRowLeft}>
-                      <Text style={styles.filterRowIcon}>{option.icon}</Text>
-
-                      <Text style={styles.filterRowLabel}>
-                        {option.label}
-                      </Text>
-
-                      <View
-                        style={[
-                          styles.filterCountBadge,
-                          option.key === 'wildfires' &&
-                            styles.filterCountBadgeWildfire,
-                          option.key === 'severeStorms' &&
-                            styles.filterCountBadgeStorm,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.filterCountText,
-                            option.key === 'wildfires' &&
-                              styles.filterCountTextWildfire,
-                            option.key === 'severeStorms' &&
-                              styles.filterCountTextStorm,
-                          ]}
-                        >
-                          {option.count}
+                  <View key={option.key}>
+                    {showGroupTitle && (
+                      <View style={styles.filterGroupHeader}>
+                        <Text style={styles.filterGroupTitle}>
+                          {option.group}
+                        </Text>
+                        <Text style={styles.filterGroupHint}>
+                          {option.group === 'Hazard Events'
+                            ? `Real event feeds within ${NEARBY_FILTER_RADIUS_KM} km (EONET Point events)`
+                            : option.group === 'Local Conditions'
+                              ? 'Current conditions at your location'
+                              : `Google Places results within ${EMERGENCY_LOCATION_MAX_KM} km`}
                         </Text>
                       </View>
-                    </View>
+                    )}
 
-                    <Switch
-                      value={pendingFilters[option.key]}
-                      onValueChange={() =>
-                        togglePendingFilter(option.key)
-                      }
-                      trackColor={{
-                        false: '#D1D5DB',
-                        true: '#16A34A',
-                      }}
-                      thumbColor="#FFFFFF"
-                    />
+                    <View style={styles.filterRow}>
+                      <View style={styles.filterRowLeft}>
+                        <Text style={styles.filterRowIcon}>{option.icon}</Text>
+
+                        <Text style={styles.filterRowLabel}>
+                          {option.label}
+                        </Text>
+
+                        <View
+                          style={[
+                            styles.filterCountBadge,
+                            option.key === 'wildfires' &&
+                              styles.filterCountBadgeWildfire,
+                            option.key === 'severeStorms' &&
+                              styles.filterCountBadgeStorm,
+                            !pendingFilters[option.key] && {
+                              backgroundColor: '#F3F4F6',
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.filterCountText,
+                              option.key === 'wildfires' &&
+                                pendingFilters[option.key] &&
+                                styles.filterCountTextWildfire,
+                              option.key === 'severeStorms' &&
+                                pendingFilters[option.key] &&
+                                styles.filterCountTextStorm,
+                              !pendingFilters[option.key] && {
+                                color: '#9CA3AF',
+                              },
+                            ]}
+                          >
+                            {option.count}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <Switch
+                        value={pendingFilters[option.key]}
+                        onValueChange={() =>
+                          togglePendingFilter(option.key)
+                        }
+                        trackColor={{
+                          false: '#D1D5DB',
+                          true: '#16A34A',
+                        }}
+                        thumbColor="#FFFFFF"
+                      />
+                    </View>
                   </View>
                 );
               })}
@@ -2742,6 +4773,26 @@ const styles =
       paddingBottom: 12,
     },
 
+
+    filterGroupHeader: {
+      paddingTop: 10,
+      paddingBottom: 6,
+    },
+
+    filterGroupTitle: {
+      fontSize: 11,
+      fontWeight: '900',
+      color: '#111827',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+
+    filterGroupHint: {
+      marginTop: 2,
+      fontSize: 9,
+      color: '#6B7280',
+    },
+
     filterRow: {
       minHeight: 50,
       flexDirection: 'row',
@@ -2822,6 +4873,131 @@ const styles =
       fontSize: 14,
       fontWeight: '900',
       color: '#FFFFFF',
+    },
+
+    selectedHazardFloatingCard: {
+      position: 'absolute',
+      top: 118,
+      left: 12,
+      right: 12,
+      paddingHorizontal: 11,
+      paddingVertical: 9,
+      borderRadius: 14,
+      backgroundColor: 'rgba(255,255,255,0.98)',
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+      elevation: 10,
+      zIndex: 30,
+      shadowColor: '#000000',
+      shadowOpacity: 0.16,
+      shadowRadius: 8,
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+    },
+
+    selectedHazardHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+
+    selectedHazardTitleRow: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 9,
+    },
+
+    selectedHazardIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F3F4F6',
+    },
+
+    selectedHazardIcon: {
+      fontSize: 17,
+    },
+
+    selectedHazardTitleWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+
+    selectedHazardCategory: {
+      fontSize: 8,
+      fontWeight: '900',
+      color: '#6B7280',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+
+    selectedHazardTitle: {
+      marginTop: 1,
+      fontSize: 12.5,
+      lineHeight: 16,
+      fontWeight: '900',
+      color: '#111827',
+    },
+
+    selectedHazardCloseButton: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#F3F4F6',
+    },
+
+    selectedHazardCloseText: {
+      marginTop: -2,
+      fontSize: 21,
+      lineHeight: 23,
+      fontWeight: '500',
+      color: '#374151',
+    },
+
+    selectedHazardSource: {
+      marginTop: 6,
+      fontSize: 8,
+      fontWeight: '800',
+      color: '#6B7280',
+    },
+
+    selectedHazardDetail: {
+      marginTop: 3,
+      fontSize: 9.5,
+      lineHeight: 13,
+      color: '#374151',
+    },
+
+    selectedHazardLocationRow: {
+      marginTop: 6,
+      paddingTop: 6,
+      borderTopWidth: 1,
+      borderTopColor: '#F1F5F9',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+
+    selectedHazardCoordinates: {
+      flex: 1,
+      fontSize: 8,
+      fontWeight: '700',
+      color: '#6B7280',
+    },
+
+    selectedHazardDistance: {
+      fontSize: 9,
+      fontWeight: '900',
+      color: '#111827',
     },
 
     bottomSheet: {
@@ -3220,11 +5396,20 @@ const styles =
 
     filteredHazardCard: {
       width: 148,
-      minHeight: 74,
+      minHeight: 88,
       paddingHorizontal: 10,
       paddingVertical: 9,
       borderRadius: 10,
       borderWidth: 1,
+    },
+
+    filteredHazardCardPressable: {
+      elevation: 1,
+    },
+
+    filteredHazardCardSelected: {
+      borderWidth: 2,
+      elevation: 4,
     },
 
     filteredHazardCardHeader: {
@@ -3253,6 +5438,13 @@ const styles =
       marginTop: 3,
       fontSize: 9,
       fontWeight: '700',
+    },
+
+    filteredHazardCardTapHint: {
+      marginTop: 5,
+      fontSize: 8,
+      fontWeight: '900',
+      opacity: 0.75,
     },
 
     filteredHazardEmptyCard: {
@@ -3516,4 +5708,56 @@ const styles =
       color: '#FFFFFF',
       fontWeight: 'bold',
     },
+
+    recenterButton: {
+      position: 'absolute',
+      right: 16,
+      top: 74,
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#FFFFFF',
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+      elevation: 5,
+      shadowColor: '#000000',
+      shadowOpacity: 0.12,
+      shadowRadius: 5,
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+      zIndex: 20,
+    },
+
+    recenterButtonIcon: {
+      fontSize: 24,
+      fontWeight: '800',
+      color: '#0A7A46',
+    },
+
+
+    mapLocationChip: {
+      position: 'absolute',
+      left: 16,
+      top: 74,
+      maxWidth: 190,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
+      backgroundColor: 'rgba(255,255,255,0.94)',
+      borderWidth: 1,
+      borderColor: '#E5E7EB',
+      elevation: 4,
+      zIndex: 19,
+    },
+
+    mapLocationChipText: {
+      fontSize: 9,
+      fontWeight: '700',
+      color: '#374151',
+    },
+
   });

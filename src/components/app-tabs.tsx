@@ -6,10 +6,10 @@ export default function AppTabs() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#10B981',
-        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarActiveTintColor: '#10b981',
+        tabBarInactiveTintColor: '#000000',
         tabBarStyle: {
-          backgroundColor: '#FFFFFF',
+          backgroundColor: '#ffffff',
           height: 72,
           paddingBottom: 10,
           paddingTop: 8,

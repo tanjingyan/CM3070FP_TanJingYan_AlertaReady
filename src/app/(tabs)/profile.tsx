@@ -50,9 +50,15 @@ function getLevelTitle(level: number) {
   return 'Preparedness Champion';
 }
 
+function clampProgress(current: number, target: number) {
+  if (target <= 0) return 100;
+  return Math.min(Math.max((current / target) * 100, 0), 100);
+}
+
 type ExtraProfileData = {
   homeArea: string;
   emergencyContact: string;
+  alertsEnabled: boolean;
 };
 
 export default function ProfileScreen() {
@@ -63,6 +69,7 @@ export default function ProfileScreen() {
     useState<ExtraProfileData>({
       homeArea: '',
       emergencyContact: '',
+      alertsEnabled: false,
     });
 
   useEffect(() => {
@@ -79,6 +86,9 @@ export default function ProfileScreen() {
           homeArea: String(data.homeArea ?? ''),
           emergencyContact: String(
             data.emergencyContact ?? ''
+          ),
+          alertsEnabled: Boolean(
+            data.alertsEnabled ?? false
           ),
         });
       }
@@ -97,36 +107,77 @@ export default function ProfileScreen() {
       userData.level
     );
 
+  const profileSetupCount =
+    Number(Boolean(extraProfile.homeArea)) +
+    Number(Boolean(extraProfile.emergencyContact));
+
   const badges = [
     {
       id: 'first-step',
       icon: 'leaf-outline' as const,
       title: 'First Step',
-      subtitle: 'Complete 1 module',
+      subtitle: 'Complete your first preparedness module',
+      progressCurrent: Math.min(completedCount, 1),
+      progressTarget: 1,
+      progressLabel: `${Math.min(completedCount, 1)} / 1`,
       earned: completedCount >= 1,
     },
     {
       id: 'task-master',
       icon: 'clipboard-outline' as const,
       title: 'Task Master',
-      subtitle: 'Complete 3 modules',
+      subtitle: 'Complete 3 preparedness modules',
+      progressCurrent: Math.min(completedCount, 3),
+      progressTarget: 3,
+      progressLabel: `${Math.min(completedCount, 3)} / 3`,
       earned: completedCount >= 3,
     },
     {
       id: 'safety-hero',
       icon: 'shield-checkmark-outline' as const,
       title: 'Safety Hero',
-      subtitle: 'Complete all modules',
+      subtitle: 'Complete all 5 preparedness modules',
+      progressCurrent: Math.min(completedCount, 5),
+      progressTarget: 5,
+      progressLabel: `${Math.min(completedCount, 5)} / 5`,
       earned: completedCount >= 5,
     },
     {
+      id: 'alert-aware',
+      icon: 'notifications-outline' as const,
+      title: 'Alert Aware',
+      subtitle: 'Enable emergency hazard alerts',
+      progressCurrent: extraProfile.alertsEnabled ? 1 : 0,
+      progressTarget: 1,
+      progressLabel: extraProfile.alertsEnabled
+        ? 'Enabled'
+        : 'Not enabled',
+      earned: extraProfile.alertsEnabled,
+    },
+    {
+      id: 'prepared-profile',
+      icon: 'home-outline' as const,
+      title: 'Emergency Ready',
+      subtitle: 'Add your home area and emergency contact',
+      progressCurrent: profileSetupCount,
+      progressTarget: 2,
+      progressLabel: `${profileSetupCount} / 2`,
+      earned: profileSetupCount >= 2,
+    },
+    {
       id: 'prepared-pro',
-      icon: 'heart-outline' as const,
+      icon: 'star-outline' as const,
       title: 'Prepared Pro',
       subtitle: 'Reach Level 3',
+      progressCurrent: Math.min(userData.level, 3),
+      progressTarget: 3,
+      progressLabel: `Level ${userData.level} / 3`,
       earned: userData.level >= 3,
     },
   ];
+
+  const earnedBadgeCount =
+    badges.filter(badge => badge.earned).length;
 
   function confirmLogout() {
     Alert.alert(
@@ -241,6 +292,15 @@ export default function ProfileScreen() {
                 Modules completed
               </Text>
             </View>
+
+            <View style={styles.stat}>
+              <Text style={styles.statNumber}>
+                {earnedBadgeCount}
+              </Text>
+              <Text style={styles.statLabel}>
+                Badges earned
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -285,56 +345,137 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        <Text style={styles.sectionTitle}>
-          Your Badges
-        </Text>
+        <View style={styles.achievementHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>
+              Achievements
+            </Text>
+            <Text style={styles.sectionSubtitle}>
+              Build preparedness habits to unlock badges
+            </Text>
+          </View>
+
+          <View style={styles.achievementCountPill}>
+            <Text style={styles.achievementCountText}>
+              {earnedBadgeCount} / {badges.length}
+            </Text>
+          </View>
+        </View>
 
         <View style={styles.badgeGrid}>
-          {badges.map(badge => (
-            <View
-              key={badge.id}
-              style={[
-                styles.badgeCard,
-                badge.earned &&
-                  styles.badgeCardEarned,
-              ]}
-            >
+          {badges.map(badge => {
+            const progress =
+              clampProgress(
+                badge.progressCurrent,
+                badge.progressTarget
+              );
+
+            return (
               <View
+                key={badge.id}
                 style={[
-                  styles.badgeIconBox,
+                  styles.badgeCard,
                   badge.earned &&
-                    styles.badgeIconBoxEarned,
+                    styles.badgeCardEarned,
                 ]}
               >
-                <Ionicons
-                  name={badge.icon}
-                  size={20}
-                  color={
-                    badge.earned
-                      ? '#0A7A46'
-                      : '#94A3B8'
-                  }
-                />
-              </View>
+                <View style={styles.badgeTopRow}>
+                  <View
+                    style={[
+                      styles.badgeIconBox,
+                      badge.earned &&
+                        styles.badgeIconBoxEarned,
+                    ]}
+                  >
+                    <Ionicons
+                      name={badge.icon}
+                      size={23}
+                      color={
+                        badge.earned
+                          ? '#0A7A46'
+                          : '#94A3B8'
+                      }
+                    />
+                  </View>
 
-              <View style={{ flex: 1 }}>
+                  <View
+                    style={[
+                      styles.badgeStatusIcon,
+                      badge.earned &&
+                        styles.badgeStatusIconEarned,
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        badge.earned
+                          ? 'checkmark'
+                          : 'lock-closed-outline'
+                      }
+                      size={12}
+                      color={
+                        badge.earned
+                          ? '#FFFFFF'
+                          : '#94A3B8'
+                      }
+                    />
+                  </View>
+                </View>
+
                 <Text
                   style={[
                     styles.badgeTitle,
                     badge.earned &&
                       styles.badgeTitleEarned,
                   ]}
+                  numberOfLines={1}
                 >
                   {badge.title}
                 </Text>
-                <Text style={styles.badgeSubtitle}>
-                  {badge.earned
-                    ? 'Earned'
-                    : badge.subtitle}
+
+                <Text
+                  style={styles.badgeSubtitle}
+                  numberOfLines={2}
+                >
+                  {badge.subtitle}
                 </Text>
+
+                <View style={styles.badgeProgressRow}>
+                  <Text
+                    style={[
+                      styles.badgeProgressText,
+                      badge.earned &&
+                        styles.badgeProgressTextEarned,
+                    ]}
+                  >
+                    {badge.earned
+                      ? 'Earned'
+                      : badge.progressLabel}
+                  </Text>
+
+                  {badge.earned && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={13}
+                      color="#16A34A"
+                    />
+                  )}
+                </View>
+
+                <View style={styles.badgeProgressTrack}>
+                  <View
+                    style={[
+                      styles.badgeProgressFill,
+                      {
+                        width: `${progress}%`,
+                      },
+                      badge.earned &&
+                        styles.badgeProgressFillEarned,
+                    ]}
+                  />
+                </View>
               </View>
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <Pressable
@@ -355,22 +496,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
+
   content: {
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 42,
   },
+
   pageTitle: {
     fontSize: 25,
     fontWeight: '900',
     color: '#111827',
     marginBottom: 22,
   },
+
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 22,
   },
+
   avatar: {
     width: 58,
     height: 58,
@@ -379,20 +524,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#D9EAFE',
   },
+
   userInfo: {
     flex: 1,
     marginLeft: 12,
   },
+
   displayName: {
     fontSize: 17,
     fontWeight: '900',
     color: '#111827',
   },
+
   email: {
     marginTop: 3,
     fontSize: 10,
     color: '#4B5563',
   },
+
   editButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -402,11 +551,13 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: '#ECFDF5',
   },
+
   editButtonText: {
     fontSize: 9,
     fontWeight: '900',
     color: '#0A7A46',
   },
+
   progressCard: {
     padding: 16,
     marginBottom: 22,
@@ -415,21 +566,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EEF2F7',
   },
+
   progressHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 10,
   },
+
   levelText: {
     flex: 1,
     fontSize: 12,
     fontWeight: '900',
     color: '#111827',
   },
+
   xpFraction: {
     fontSize: 9,
     color: '#374151',
   },
+
   progressTrack: {
     height: 8,
     marginTop: 12,
@@ -437,29 +592,37 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: '#E5E7EB',
   },
+
   progressFill: {
     height: '100%',
     borderRadius: 999,
     backgroundColor: '#16A34A',
   },
+
   statsRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: 18,
-    gap: 34,
+    gap: 10,
   },
+
   stat: {
-    minWidth: 80,
+    flex: 1,
   },
+
   statNumber: {
     fontSize: 18,
     fontWeight: '900',
     color: '#111827',
   },
+
   statLabel: {
     marginTop: 2,
-    fontSize: 9,
+    fontSize: 8,
+    lineHeight: 11,
     color: '#6B7280',
   },
+
   detailsCard: {
     padding: 14,
     marginBottom: 22,
@@ -469,75 +632,169 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EEF2F7',
   },
+
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
   },
+
   detailLabel: {
     fontSize: 8,
     fontWeight: '800',
     color: '#6B7280',
   },
+
   detailValue: {
     marginTop: 1,
     fontSize: 10,
     fontWeight: '700',
     color: '#111827',
   },
+
+  achievementHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+
   sectionTitle: {
-    marginBottom: 11,
     fontSize: 14,
     fontWeight: '900',
     color: '#111827',
   },
+
+  sectionSubtitle: {
+    marginTop: 3,
+    fontSize: 8,
+    color: '#6B7280',
+  },
+
+  achievementCountPill: {
+    minWidth: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: '#ECFDF5',
+  },
+
+  achievementCountText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#0A7A46',
+  },
+
   badgeGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: 10,
   },
+
   badgeCard: {
     width: '48.5%',
-    minHeight: 70,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-    padding: 11,
-    borderRadius: 12,
+    minHeight: 150,
+    padding: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#E5E7EB',
     backgroundColor: '#FFFFFF',
   },
+
   badgeCardEarned: {
-    borderColor: '#BBF7D0',
-    backgroundColor: '#DCFCE7',
+    borderColor: '#86EFAC',
+    backgroundColor: '#F0FDF4',
   },
+
+  badgeTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+
   badgeIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F8FAFC',
   },
+
   badgeIconBoxEarned: {
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#DCFCE7',
   },
+
+  badgeStatusIcon: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+
+  badgeStatusIconEarned: {
+    backgroundColor: '#16A34A',
+  },
+
   badgeTitle: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '900',
-    color: '#475569',
+    color: '#334155',
   },
+
   badgeTitleEarned: {
     color: '#166534',
   },
+
   badgeSubtitle: {
-    marginTop: 2,
-    fontSize: 7,
-    lineHeight: 10,
-    color: '#94A3B8',
+    minHeight: 24,
+    marginTop: 4,
+    fontSize: 7.5,
+    lineHeight: 11,
+    color: '#64748B',
   },
+
+  badgeProgressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 10,
+  },
+
+  badgeProgressText: {
+    fontSize: 7.5,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+
+  badgeProgressTextEarned: {
+    color: '#15803D',
+  },
+
+  badgeProgressTrack: {
+    height: 5,
+    marginTop: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: '#E2E8F0',
+  },
+
+  badgeProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#94A3B8',
+  },
+
+  badgeProgressFillEarned: {
+    backgroundColor: '#22C55E',
+  },
+
   logoutButton: {
     minHeight: 45,
     marginTop: 24,
@@ -548,6 +805,7 @@ const styles = StyleSheet.create({
     borderColor: '#F87171',
     backgroundColor: '#FFFFFF',
   },
+
   logoutText: {
     fontSize: 10,
     fontWeight: '900',

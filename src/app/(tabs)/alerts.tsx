@@ -1,178 +1,461 @@
-import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import {
+  collection,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  setDoc,
+} from 'firebase/firestore';
+import {
+  getFunctions,
+  httpsCallable,
+} from 'firebase/functions';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { auth, db } from '../../firebase/firebaseConfig';
+import {
+  disableRemoteAlerts,
+  enableRemoteAlerts,
+  refreshRemoteAlertLocation,
+} from '../../services/pushNotifications';
+
+type HazardAlert = {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  source: string;
+  distanceKm?: number | null;
+  createdAt?: { toDate?: () => Date } | null;
+  read?: boolean;
+  isTest?: boolean;
+};
 
 export default function AlertsScreen() {
+  const user = auth.currentUser;
+
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const [alerts, setAlerts] = useState<HazardAlert[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [changing, setChanging] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    const unsubscribeUser = onSnapshot(
+      doc(db, 'users', user.uid),
+      snapshot => {
+        setAlertsEnabled(
+          snapshot.exists() &&
+            snapshot.data().alertsEnabled === true
+        );
+      }
+    );
+
+    const alertsQuery = query(
+      collection(db, 'users', user.uid, 'alerts'),
+      orderBy('createdAt', 'desc')
+    );
+
+    const unsubscribeAlerts = onSnapshot(
+      alertsQuery,
+      snapshot => {
+        const next = snapshot.docs.map(alertDoc => ({
+          id: alertDoc.id,
+          ...alertDoc.data(),
+        })) as HazardAlert[];
+
+        setAlerts(next);
+        setLoading(false);
+      },
+      error => {
+        console.warn('Load alerts error:', error);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      unsubscribeUser();
+      unsubscribeAlerts();
+    };
+  }, [user?.uid]);
+
+  const unreadCount = useMemo(
+    () => alerts.filter(item => item.read !== true).length,
+    [alerts]
+  );
+
+  async function toggleAlerts(nextValue: boolean) {
+    if (!user) {
+      Alert.alert('Login required', 'Please sign in again.');
+      return;
+    }
+
+    try {
+      setChanging(true);
+
+      if (nextValue) {
+        await enableRemoteAlerts();
+        Alert.alert(
+          'Real-time alerts enabled',
+          'Alerta Ready can now send remote hazard notifications based on your last saved alert location.'
+        );
+      } else {
+        await disableRemoteAlerts();
+        Alert.alert(
+          'Alerts disabled',
+          'Remote hazard notifications have been turned off.'
+        );
+      }
+    } catch (error: any) {
+      Alert.alert(
+        'Unable to update alerts',
+        error?.message ?? 'Please try again.'
+      );
+    } finally {
+      setChanging(false);
+    }
+  }
+
+  async function refreshLocation() {
+    try {
+      setChanging(true);
+      await refreshRemoteAlertLocation();
+
+      Alert.alert(
+        'Alert location updated',
+        'Future hazard checks will use your current location.'
+      );
+    } catch (error: any) {
+      Alert.alert(
+        'Unable to update location',
+        error?.message ?? 'Please try again.'
+      );
+    } finally {
+      setChanging(false);
+    }
+  }
+
+  async function sendTestHazard() {
+    if (!alertsEnabled) {
+      Alert.alert(
+        'Enable alerts first',
+        'Turn on Real-time hazard alerts before running the test.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Send test hazard?',
+      'This sends a clearly labelled simulated hazard notification to your own device. It does not represent a real emergency.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Send Test',
+          onPress: async () => {
+            try {
+              setSendingTest(true);
+
+              const functions = getFunctions(
+                undefined,
+                'us-central1'
+              );
+
+              const callable = httpsCallable<
+                void,
+                { success: boolean }
+              >(
+                functions,
+                'sendTestHazard'
+              );
+
+              const result = await callable();
+
+              if (result.data.success) {
+                Alert.alert(
+                  'Test alert sent',
+                  'A simulated hazard was sent through Firebase Cloud Messaging and should appear in Recent alerts.'
+                );
+              }
+            } catch (error: any) {
+              console.warn('Send test hazard error:', error);
+
+              Alert.alert(
+                'Test failed',
+                error?.message ??
+                  'Unable to send the test hazard.'
+              );
+            } finally {
+              setSendingTest(false);
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function openAlert(item: HazardAlert) {
+    if (user) {
+      await setDoc(
+        doc(db, 'users', user.uid, 'alerts', item.id),
+        { read: true },
+        { merge: true }
+      );
+    }
+
+    if (item.isTest) {
+      return;
+    }
+
+    router.push('/(tabs)/map' as any);
+  }
+
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={styles.safeArea}>
       <ScrollView
-        style={styles.container}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>Alerts</Text>
-            <Text style={styles.subtitle}>Current emergency updates</Text>
-          </View>
-
-          <View style={styles.filterCircle}>
-            <Text style={styles.filterIcon}>⚙️</Text>
-          </View>
-        </View>
-
-        <View style={styles.tabRow}>
-          <Text style={styles.activeTab}>Active</Text>
-          <Text style={styles.inactiveTab}>History</Text>
-        </View>
-
-        <View style={styles.featuredAlert}>
-          <View style={styles.alertTopRow}>
-            <View style={styles.dangerIconCircle}>
-              <Text style={styles.dangerIcon}>!</Text>
-            </View>
-
-            <View style={{ flex: 1 }}>
-              <Text style={styles.riskLabel}>High Risk</Text>
-              <Text style={styles.featuredTitle}>Flood Risk in Your Area</Text>
-              <Text style={styles.featuredText}>
-                Heavy rainfall expected. Avoid low-lying areas near waterways.
-              </Text>
-
-              <View style={styles.metaRow}>
-                <Text style={styles.metaText}>📍 Singapore</Text>
-                <Text style={styles.metaText}>Updated 10 min ago</Text>
-              </View>
-            </View>
-
-            <Text style={styles.chevron}>›</Text>
-          </View>
-
-          <View style={styles.buttonRow}>
-            <Pressable
-              style={styles.outlineButton}
-              onPress={() => router.push('/(tabs)/map' as any)}
-            >
-              <Text style={styles.outlineButtonText}>🗺️ View Map</Text>
-            </Pressable>
-
-            <Pressable style={styles.redButton}>
-              <Text style={styles.redButtonText}>🛡️ Safety Steps</Text>
-            </Pressable>
-          </View>
-        </View>
-
-        <Text style={styles.sectionTitle}>Active Alerts</Text>
-
-        <AlertCard
-          icon="🌧️"
-          risk="High Risk"
-          title="Heavy Rainfall Warning"
-          text="Very heavy rain expected in the next 6 hours."
-          time="Updated 20 min ago"
-          riskColor="#DC2626"
-          bgColor="#FEE2E2"
-        />
-
-        <AlertCard
-          icon="🌊"
-          risk="Moderate Risk"
-          title="River Water Level Rising"
-          text="Water level is rising near low-lying areas."
-          time="Updated 1 hour ago"
-          riskColor="#EA580C"
-          bgColor="#FFEDD5"
-        />
-
-        <AlertCard
-          icon="💨"
-          risk="Low Risk"
-          title="Strong Winds Advisory"
-          text="Strong winds expected. Secure loose objects."
-          time="Updated 2 hours ago"
-          riskColor="#CA8A04"
-          bgColor="#FEF3C7"
-        />
-
-        <View style={styles.infoBox}>
-          <View style={styles.infoIconCircle}>
-            <Text style={styles.infoIcon}>🔔</Text>
-          </View>
-
           <View style={{ flex: 1 }}>
-            <Text style={styles.infoTitle}>Stay Informed, Stay Safe</Text>
-            <Text style={styles.infoText}>
-              We will notify you about important alerts that may affect your area.
+            <Text style={styles.title}>Alerts</Text>
+            <Text style={styles.subtitle}>
+              Location-aware hazard notifications and recent alert history.
             </Text>
           </View>
 
-          <Pressable style={styles.manageButton}>
-            <Text style={styles.manageButtonText}>Manage Alerts</Text>
-          </Pressable>
+          {unreadCount > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadText}>
+                {unreadCount}
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.settingsCard}>
+          <View style={styles.settingsTop}>
+            <View style={styles.bellIcon}>
+              <Ionicons
+                name="notifications-outline"
+                size={22}
+                color="#0A7A46"
+              />
+            </View>
+
+            <View style={{ flex: 1 }}>
+              <Text style={styles.settingsTitle}>
+                Real-time hazard alerts
+              </Text>
+              <Text style={styles.settingsText}>
+                Receive remote notifications when Alerta Ready detects a relevant hazard near your saved alert location.
+              </Text>
+            </View>
+
+            <Switch
+              value={alertsEnabled}
+              disabled={changing}
+              onValueChange={toggleAlerts}
+            />
+          </View>
+
+          {alertsEnabled && (
+            <Pressable
+              style={styles.locationButton}
+              disabled={changing}
+              onPress={refreshLocation}
+            >
+              <Ionicons
+                name="locate-outline"
+                size={15}
+                color="#0A7A46"
+              />
+              <Text style={styles.locationButtonText}>
+                Refresh alert location
+              </Text>
+            </Pressable>
+          )}
+
+
+          {__DEV__ && (
+            <View style={styles.testArea}>
+              <View style={styles.testLabelRow}>
+                <Ionicons
+                  name="flask-outline"
+                  size={14}
+                  color="#7C3AED"
+                />
+                <Text style={styles.testLabel}>
+                  DEVELOPMENT TEST
+                </Text>
+              </View>
+
+              <Pressable
+                style={[
+                  styles.testButton,
+                  (!alertsEnabled || sendingTest) &&
+                    styles.testButtonDisabled,
+                ]}
+                disabled={!alertsEnabled || sendingTest}
+                onPress={sendTestHazard}
+              >
+                {sendingTest ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#FFFFFF"
+                  />
+                ) : (
+                  <>
+                    <Ionicons
+                      name="warning-outline"
+                      size={15}
+                      color="#FFFFFF"
+                    />
+                    <Text style={styles.testButtonText}>
+                      Send Test Hazard
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+
+              <Text style={styles.testHelper}>
+                Sends a clearly labelled simulation through the same Firebase Cloud Messaging pipeline. No real hazard is created.
+              </Text>
+            </View>
+          )}
+
+          <Text style={styles.safetyText}>
+            Alerta Ready alerts are contextual indicators generated from monitored data sources. They are not official government warnings. Always follow local authorities.
+          </Text>
         </View>
 
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Recent Alerts</Text>
-          <Text style={styles.viewAll}>View All</Text>
+          <Text style={styles.sectionTitle}>
+            Recent alerts
+          </Text>
+          <Text style={styles.sectionMeta}>
+            {alerts.length}
+          </Text>
         </View>
 
-        <RecentAlert title="Flood warning issued for Singapore" time="Yesterday, 8:30 PM" />
-        <RecentAlert title="Heavy rainfall warning ended" time="Yesterday, 2:15 PM" />
-        <RecentAlert title="Strong winds advisory ended" time="May 24, 10:40 AM" />
+        {loading ? (
+          <ActivityIndicator
+            style={{ marginTop: 30 }}
+            color="#0A7A46"
+          />
+        ) : alerts.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Ionicons
+              name="shield-checkmark-outline"
+              size={34}
+              color="#0A7A46"
+            />
+            <Text style={styles.emptyTitle}>
+              No remote alerts yet
+            </Text>
+            <Text style={styles.emptyText}>
+              When a monitored hazard meets Alerta Ready's proximity rules, the alert will appear here and can also be delivered as a push notification.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.alertList}>
+            {alerts.map(item => {
+              const date = item.createdAt?.toDate?.();
+
+              return (
+                <Pressable
+                  key={item.id}
+                  style={[
+                    styles.alertCard,
+                    item.read !== true && styles.alertCardUnread,
+                    item.isTest && styles.testAlertCard,
+                  ]}
+                  onPress={() => openAlert(item)}
+                >
+                  <View
+                    style={[
+                      styles.alertIcon,
+                      item.isTest && styles.testAlertIcon,
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        item.isTest
+                          ? 'flask-outline'
+                          : 'warning-outline'
+                      }
+                      size={20}
+                      color={
+                        item.isTest
+                          ? '#7C3AED'
+                          : '#B45309'
+                      }
+                    />
+                  </View>
+
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.alertTitleRow}>
+                      <Text
+                        style={styles.alertTitle}
+                        numberOfLines={1}
+                      >
+                        {item.title}
+                      </Text>
+                      {item.read !== true && (
+                        <View style={styles.newDot} />
+                      )}
+                    </View>
+
+                    {item.isTest && (
+                      <Text style={styles.testBadge}>
+                        SIMULATION
+                      </Text>
+                    )}
+
+                    <Text style={styles.alertBody}>
+                      {item.body}
+                    </Text>
+
+                    <Text style={styles.alertMeta}>
+                      Source: {item.source}
+                      {typeof item.distanceKm === 'number'
+                        ? ` • ${item.distanceKm.toFixed(0)} km away`
+                        : ''}
+                    </Text>
+
+                    {date && (
+                      <Text style={styles.alertTime}>
+                        {date.toLocaleString()}
+                      </Text>
+                    )}
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-function AlertCard({
-  icon,
-  risk,
-  title,
-  text,
-  time,
-  riskColor,
-  bgColor,
-}: {
-  icon: string;
-  risk: string;
-  title: string;
-  text: string;
-  time: string;
-  riskColor: string;
-  bgColor: string;
-}) {
-  return (
-    <View style={styles.alertCard}>
-      <View style={[styles.alertIconCircle, { backgroundColor: bgColor }]}>
-        <Text style={styles.alertEmoji}>{icon}</Text>
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <Text style={[styles.cardRisk, { color: riskColor }]}>{risk}</Text>
-        <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.cardText}>{text}</Text>
-        <Text style={styles.cardTime}>🕒 {time}</Text>
-      </View>
-
-      <Text style={styles.cardChevron}>›</Text>
-    </View>
-  );
-}
-
-function RecentAlert({ title, time }: { title: string; time: string }) {
-  return (
-    <View style={styles.recentRow}>
-      <View style={styles.checkCircle}>
-        <Text style={styles.checkText}>✓</Text>
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <Text style={styles.recentTitle}>{title}</Text>
-        <Text style={styles.recentTime}>{time}</Text>
-      </View>
-
-      <Text style={styles.cardChevron}>›</Text>
-    </View>
   );
 }
 
@@ -181,333 +464,246 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F8FAFC',
   },
-
-  container: {
-    flex: 1,
-  },
-
   content: {
     paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 100,
+    paddingTop: 12,
+    paddingBottom: 45,
   },
-
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 18,
+    marginBottom: 16,
   },
-
   title: {
-    fontSize: 26,
-    fontWeight: 'bold',
+    fontSize: 25,
+    fontWeight: '900',
     color: '#111827',
   },
-
   subtitle: {
-    fontSize: 13,
-    color: '#6B7280',
     marginTop: 4,
+    fontSize: 10,
+    lineHeight: 15,
+    color: '#6B7280',
   },
-
-  filterCircle: {
+  unreadBadge: {
+    minWidth: 26,
+    height: 26,
+    paddingHorizontal: 7,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#DCFCE7',
+  },
+  unreadText: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#166534',
+  },
+  settingsCard: {
+    padding: 15,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    marginBottom: 22,
+  },
+  settingsTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  bellIcon: {
     width: 42,
     height: 42,
-    borderRadius: 21,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
+    borderRadius: 12,
     alignItems: 'center',
-    elevation: 2,
-  },
-
-  filterIcon: {
-    fontSize: 20,
-  },
-
-  tabRow: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: 5,
-    marginBottom: 16,
-    elevation: 1,
-  },
-
-  activeTab: {
-    flex: 1,
-    textAlign: 'center',
+    justifyContent: 'center',
     backgroundColor: '#ECFDF5',
-    paddingVertical: 10,
-    borderRadius: 10,
-    color: '#059669',
-    fontWeight: 'bold',
   },
-
-  inactiveTab: {
-    flex: 1,
-    textAlign: 'center',
-    paddingVertical: 10,
-    color: '#6B7280',
-    fontWeight: 'bold',
-  },
-
-  featuredAlert: {
-    backgroundColor: '#FEF2F2',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
-    marginBottom: 20,
-  },
-
-  alertTopRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-
-  dangerIconCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#DC2626',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  dangerIcon: {
-    color: '#FFFFFF',
-    fontSize: 34,
-    fontWeight: 'bold',
-  },
-
-  riskLabel: {
-    color: '#DC2626',
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-
-  featuredTitle: {
-    fontSize: 19,
-    fontWeight: 'bold',
-    color: '#111827',
-  },
-
-  featuredText: {
-    color: '#374151',
-    fontSize: 13,
-    marginTop: 6,
-    lineHeight: 19,
-  },
-
-  metaRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 14,
-  },
-
-  metaText: {
-    color: '#4B5563',
-    fontSize: 11,
-  },
-
-  chevron: {
-    fontSize: 34,
-    color: '#374151',
-  },
-
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 16,
-  },
-
-  outlineButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#DC2626',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-  },
-
-  outlineButtonText: {
-    color: '#991B1B',
-    fontWeight: 'bold',
-  },
-
-  redButton: {
-    flex: 1,
-    backgroundColor: '#DC2626',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-
-  redButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 12,
-  },
-
-  alertCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    gap: 12,
-    elevation: 2,
-  },
-
-  alertIconCircle: {
-    width: 54,
-    height: 54,
-    borderRadius: 27,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  alertEmoji: {
-    fontSize: 26,
-  },
-
-  cardRisk: {
+  settingsTitle: {
     fontSize: 12,
-    fontWeight: 'bold',
-    marginBottom: 2,
-  },
-
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: 'bold',
+    fontWeight: '900',
     color: '#111827',
   },
-
-  cardText: {
-    fontSize: 12,
-    color: '#4B5563',
+  settingsText: {
     marginTop: 3,
-  },
-
-  cardTime: {
-    fontSize: 11,
+    fontSize: 8,
+    lineHeight: 12,
     color: '#6B7280',
-    marginTop: 6,
+  },
+  locationButton: {
+    marginTop: 13,
+    minHeight: 38,
+    borderRadius: 9,
+    flexDirection: 'row',
+    gap: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ECFDF5',
+  },
+  locationButtonText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#0A7A46',
   },
 
-  cardChevron: {
-    fontSize: 26,
+  testArea: {
+    marginTop: 13,
+    paddingTop: 13,
+    borderTopWidth: 1,
+    borderTopColor: '#EEE9FE',
+  },
+  testLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 7,
+  },
+  testLabel: {
+    fontSize: 7.5,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    color: '#7C3AED',
+  },
+  testButton: {
+    minHeight: 40,
+    borderRadius: 9,
+    flexDirection: 'row',
+    gap: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#7C3AED',
+  },
+  testButtonDisabled: {
+    opacity: 0.45,
+  },
+  testButtonText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#FFFFFF',
+  },
+  testHelper: {
+    marginTop: 6,
+    fontSize: 7.5,
+    lineHeight: 11,
+    color: '#8B7AB8',
+  },
+  safetyText: {
+    marginTop: 11,
+    fontSize: 7.5,
+    lineHeight: 11,
     color: '#9CA3AF',
   },
-
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#ECFDF5',
-    borderRadius: 16,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: '#BBF7D0',
-    marginTop: 4,
-    marginBottom: 18,
-    gap: 12,
-  },
-
-  infoIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#BBF7D0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  infoIcon: {
-    fontSize: 22,
-  },
-
-  infoTitle: {
-    color: '#047857',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
-
-  infoText: {
-    color: '#065F46',
-    fontSize: 11,
-    marginTop: 3,
-  },
-
-  manageButton: {
-    borderWidth: 1,
-    borderColor: '#059669',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-
-  manageButtonText: {
-    color: '#047857',
-    fontWeight: 'bold',
-    fontSize: 11,
-  },
-
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 10,
   },
-
-  viewAll: {
-    color: '#10B981',
-    fontWeight: 'bold',
-    marginBottom: 12,
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#111827',
   },
-
-  recentRow: {
+  sectionMeta: {
+    fontSize: 9,
+    color: '#6B7280',
+  },
+  emptyCard: {
+    padding: 28,
+    alignItems: 'center',
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  emptyTitle: {
+    marginTop: 10,
+    fontSize: 12,
+    fontWeight: '900',
+    color: '#111827',
+  },
+  emptyText: {
+    marginTop: 5,
+    textAlign: 'center',
+    fontSize: 8.5,
+    lineHeight: 13,
+    color: '#6B7280',
+  },
+  alertList: {
+    gap: 9,
+  },
+  alertCard: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 13,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+  },
+  alertCardUnread: {
+    borderColor: '#BBF7D0',
+    backgroundColor: '#F0FDF4',
+  },
+  testAlertCard: {
+    borderColor: '#DDD6FE',
+  },
+  alertIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFBEB',
+  },
+  testAlertIcon: {
+    backgroundColor: '#F5F3FF',
+  },
+  alertTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 14,
-    borderRadius: 14,
-    marginBottom: 8,
-    gap: 12,
-    elevation: 1,
+    gap: 7,
   },
-
-  checkCircle: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#059669',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-
-  checkText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 18,
-  },
-
-  recentTitle: {
-    fontWeight: 'bold',
+  alertTitle: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '900',
     color: '#111827',
-    fontSize: 13,
   },
-
-  recentTime: {
+  newDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#16A34A',
+  },
+  testBadge: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: '#EDE9FE',
+    fontSize: 6.5,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    color: '#6D28D9',
+  },
+  alertBody: {
+    marginTop: 4,
+    fontSize: 8.5,
+    lineHeight: 13,
+    color: '#4B5563',
+  },
+  alertMeta: {
+    marginTop: 6,
+    fontSize: 7.5,
     color: '#6B7280',
-    fontSize: 11,
-    marginTop: 2,
+  },
+  alertTime: {
+    marginTop: 3,
+    fontSize: 7,
+    color: '#9CA3AF',
   },
 });

@@ -5,7 +5,6 @@ import { useUserProgress } from '../../hooks/use-UserProgress';
 import MapView, { Marker, Circle } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { useCallback, useState } from 'react';
-import { TOMORROW_API_KEY } from '../../constants/api';
 
 function getCurrentLevelXp(level: number) {
   if (level === 1) return 0;
@@ -31,31 +30,108 @@ function getLevelProgress(xp: number, level: number) {
   return Math.min(Math.max(progress, 0), 100);
 }
 
+type RiskLevel = 'Low Risk' | 'Moderate Risk' | 'High Risk';
+
+type WeatherMetrics = {
+  rain: number;
+  precipitation: number;
+  precipitationProbability: number;
+  soilMoisture: number;
+  windSpeed: number;
+  windGusts: number;
+  temperature: number;
+  apparentTemperature: number;
+};
+
+const EMPTY_WEATHER_METRICS: WeatherMetrics = {
+  rain: 0,
+  precipitation: 0,
+  precipitationProbability: 0,
+  soilMoisture: 0,
+  windSpeed: 0,
+  windGusts: 0,
+  temperature: 0,
+  apparentTemperature: 0,
+};
+
 function getWeatherDescription(code: number) {
-  switch (code) {
-    case 1000:
-      return 'Clear';
-    case 1100:
-      return 'Mostly Clear';
-    case 1101:
-      return 'Partly Cloudy';
-    case 1001:
-      return 'Cloudy';
-    case 4000:
-      return 'Drizzle';
-    case 4200:
-      return 'Light Rain';
-    case 4201:
-      return 'Heavy Rain';
-    case 5000:
-      return 'Snow';
-    case 8000:
-      return 'Thunderstorm';
-    default:
-      return 'Unknown';
-  }
+  if (code === 0) return 'Clear';
+  if (code === 1) return 'Mostly Clear';
+  if (code === 2) return 'Partly Cloudy';
+  if (code === 3) return 'Cloudy';
+  if (code === 45 || code === 48) return 'Fog';
+  if ([51, 53, 55, 56, 57].includes(code)) return 'Drizzle';
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) return 'Rain';
+  if ([71, 73, 75, 77, 85, 86].includes(code)) return 'Snow';
+  if ([95, 96, 99].includes(code)) return 'Thunderstorm';
+  return 'Current Weather';
 }
 
+function getRainFloodRisk(
+  rain: number,
+  precipitation: number,
+  precipitationProbability: number,
+  soilMoisture: number
+): RiskLevel {
+  if (
+    rain >= 10 ||
+    precipitation >= 10 ||
+    precipitationProbability >= 80 ||
+    (soilMoisture >= 0.45 && precipitationProbability >= 60)
+  ) {
+    return 'High Risk';
+  }
+
+  if (
+    rain >= 3 ||
+    precipitation >= 3 ||
+    precipitationProbability >= 50 ||
+    (soilMoisture >= 0.35 && precipitationProbability >= 40)
+  ) {
+    return 'Moderate Risk';
+  }
+
+  return 'Low Risk';
+}
+
+function getWindRisk(
+  windSpeed: number,
+  windGusts: number
+): RiskLevel {
+  if (windSpeed >= 60 || windGusts >= 75) return 'High Risk';
+  if (windSpeed >= 40 || windGusts >= 50) return 'Moderate Risk';
+  return 'Low Risk';
+}
+
+function getTemperatureRisk(
+  temperature: number,
+  apparentTemperature: number
+): RiskLevel {
+  const hottest = Math.max(temperature, apparentTemperature);
+  const coldest = Math.min(temperature, apparentTemperature);
+
+  if (hottest >= 40 || coldest <= 0) return 'High Risk';
+  if (hottest >= 35 || coldest <= 5) return 'Moderate Risk';
+  return 'Low Risk';
+}
+
+function getOverallRisk(levels: RiskLevel[]): RiskLevel {
+  if (levels.includes('High Risk')) return 'High Risk';
+  if (levels.includes('Moderate Risk')) return 'Moderate Risk';
+  return 'Low Risk';
+}
+
+function getRiskColors(level: RiskLevel) {
+  if (level === 'High Risk') {
+    return { bg: '#FEE2E2', text: '#B91C1C', border: '#FCA5A5' };
+  }
+
+  if (level === 'Moderate Risk') {
+    return { bg: '#FEF3C7', text: '#A16207', border: '#FDE68A' };
+  }
+
+  return { bg: '#DCFCE7', text: '#15803D', border: '#BBF7D0' };
+}
 
 function getDistanceInMeters(
   lat1: number,
@@ -105,11 +181,16 @@ export default function DashboardScreen() {
   const levelProgress = getLevelProgress(userData.xp, userData.level);
   const [temperature, setTemperature] = useState('--');
   const [weatherText, setWeatherText] = useState('Loading...');
-  const [riskLevel, setRiskLevel] = useState('Low Risk');
+  const [riskLevel, setRiskLevel] = useState<RiskLevel>('Low Risk');
+  const [rainFloodRisk, setRainFloodRisk] = useState<RiskLevel>('Low Risk');
+  const [windRisk, setWindRisk] = useState<RiskLevel>('Low Risk');
+  const [temperatureRisk, setTemperatureRisk] = useState<RiskLevel>('Low Risk');
+  const [weatherMetrics, setWeatherMetrics] =
+    useState<WeatherMetrics>(EMPTY_WEATHER_METRICS);
 
   // Shared live location/map snapshot used by the dashboard preview.
-  // The Emergency Map uses the same device GPS + NASA EONET + USGS +
-  // Tomorrow.io sources, so both screens show the same real-world area.
+  // The Emergency Map uses the same device GPS + NASA EONET + USGS sources,
+  // while detailed weather context is presented here on the Dashboard.
   const [dashboardLocation, setDashboardLocation] =
     useState<Location.LocationObjectCoords | null>(null);
 
@@ -258,57 +339,106 @@ export default function DashboardScreen() {
     longitude: number
   ) {
     try {
+      const weatherVariables = [
+        'precipitation_probability',
+        'rain',
+        'precipitation',
+        'soil_moisture_0_to_1cm',
+        'wind_speed_10m',
+        'wind_gusts_10m',
+        'temperature_2m',
+        'apparent_temperature',
+      ].join(',');
+
       const response = await fetch(
-        `https://api.tomorrow.io/v4/weather/realtime?location=${latitude},${longitude}&apikey=${TOMORROW_API_KEY}`
+        `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}` +
+          `&current=temperature_2m,apparent_temperature,weather_code` +
+          `&hourly=${weatherVariables}&forecast_hours=1&wind_speed_unit=kmh&timezone=auto`,
+        {
+          method: 'GET',
+          headers: { Accept: 'application/json' },
+        }
       );
 
       if (!response.ok) {
         throw new Error(
-          `Tomorrow.io request failed: ${response.status}`
+          `Open-Meteo request failed: ${response.status}`
         );
       }
 
-      const data = await response.json();
-      const values = data?.data?.values ?? {};
+      const responseText = await response.text();
 
-      const temp = Math.round(
-        values.temperature ?? 0
-      );
-
-      const weatherCode =
-        values.weatherCode ?? 0;
-
-      const rainIntensity =
-        values.rainIntensity ?? 0;
-
-      const precipitationProbability =
-        values.precipitationProbability ?? 0;
-
-      setTemperature(`${temp}°C`);
-      setWeatherText(
-        getWeatherDescription(weatherCode)
-      );
-
-      // Same prototype weather-risk thresholds as Emergency Map.
-      if (
-        rainIntensity >= 10 ||
-        precipitationProbability >= 80
-      ) {
-        setRiskLevel('High Risk');
-      } else if (
-        rainIntensity >= 3 ||
-        precipitationProbability >= 50
-      ) {
-        setRiskLevel('Moderate Risk');
-      } else {
-        setRiskLevel('Low Risk');
+      if (!responseText.trim()) {
+        throw new Error('Open-Meteo returned an empty response.');
       }
-    } catch (error) {
-      console.warn(
-        'Dashboard weather unavailable:',
-        error
+
+      const data = JSON.parse(responseText);
+      const hourly = data?.hourly ?? {};
+      const current = data?.current ?? {};
+
+      const metrics: WeatherMetrics = {
+        rain: Number(hourly?.rain?.[0] ?? 0),
+        precipitation: Number(hourly?.precipitation?.[0] ?? 0),
+        precipitationProbability: Number(
+          hourly?.precipitation_probability?.[0] ?? 0
+        ),
+        soilMoisture: Number(
+          hourly?.soil_moisture_0_to_1cm?.[0] ?? 0
+        ),
+        windSpeed: Number(hourly?.wind_speed_10m?.[0] ?? 0),
+        windGusts: Number(hourly?.wind_gusts_10m?.[0] ?? 0),
+        temperature: Number(
+          current?.temperature_2m ?? hourly?.temperature_2m?.[0] ?? 0
+        ),
+        apparentTemperature: Number(
+          current?.apparent_temperature ??
+            hourly?.apparent_temperature?.[0] ??
+            0
+        ),
+      };
+
+      const nextRainFloodRisk = getRainFloodRisk(
+        metrics.rain,
+        metrics.precipitation,
+        metrics.precipitationProbability,
+        metrics.soilMoisture
       );
 
+      const nextWindRisk = getWindRisk(
+        metrics.windSpeed,
+        metrics.windGusts
+      );
+
+      const nextTemperatureRisk = getTemperatureRisk(
+        metrics.temperature,
+        metrics.apparentTemperature
+      );
+
+      const overall = getOverallRisk([
+        nextRainFloodRisk,
+        nextWindRisk,
+        nextTemperatureRisk,
+      ]);
+
+      setWeatherMetrics(metrics);
+      setRainFloodRisk(nextRainFloodRisk);
+      setWindRisk(nextWindRisk);
+      setTemperatureRisk(nextTemperatureRisk);
+      setRiskLevel(overall);
+      setTemperature(`${Math.round(metrics.temperature)}°C`);
+      setWeatherText(
+        getWeatherDescription(Number(current?.weather_code ?? -1))
+      );
+
+      console.log('Dashboard Open-Meteo weather context:', {
+        metrics,
+        rainFloodRisk: nextRainFloodRisk,
+        windRisk: nextWindRisk,
+        temperatureRisk: nextTemperatureRisk,
+        overall,
+      });
+    } catch (error) {
+      console.warn('Dashboard weather unavailable:', error);
       setWeatherText('Unavailable');
     }
   }
@@ -318,29 +448,49 @@ export default function DashboardScreen() {
       const [eonetResponse, usgsResponse] =
         await Promise.all([
           fetch(
-            'https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=100'
+            `https://eonet.gsfc.nasa.gov/api/v3/events?status=open&limit=100&_=${Date.now()}`,
+            { headers: { Accept: 'application/json' } }
           ),
           fetch(
-            'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson'
+            'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
+            { headers: { Accept: 'application/json' } }
           ),
         ]);
 
       if (eonetResponse.ok) {
-        const eonetData =
-          await eonetResponse.json();
+        const text = await eonetResponse.text();
 
-        setDisasterEvents(
-          eonetData.events ?? []
-        );
+        if (text.trim()) {
+          try {
+            const eonetData = JSON.parse(text);
+            setDisasterEvents(
+              Array.isArray(eonetData?.events) ? eonetData.events : []
+            );
+          } catch (error) {
+            console.warn(
+              'Dashboard NASA EONET returned invalid JSON. Keeping existing data.',
+              error
+            );
+          }
+        }
       }
 
       if (usgsResponse.ok) {
-        const usgsData =
-          await usgsResponse.json();
+        const text = await usgsResponse.text();
 
-        setEarthquakes(
-          usgsData.features ?? []
-        );
+        if (text.trim()) {
+          try {
+            const usgsData = JSON.parse(text);
+            setEarthquakes(
+              Array.isArray(usgsData?.features) ? usgsData.features : []
+            );
+          } catch (error) {
+            console.warn(
+              'Dashboard USGS returned invalid JSON. Keeping existing data.',
+              error
+            );
+          }
+        }
       }
     } catch (error) {
       console.warn(
@@ -532,52 +682,68 @@ export default function DashboardScreen() {
 
         </View>
 
-        <View style={styles.alertCard}>
-          <Text style={styles.alertIcon}>⚠️</Text>
+        <View style={styles.weatherRiskCard}>
+          <View style={styles.weatherRiskHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.weatherRiskTitle}>Weather risk overview</Text>
+              <Text style={styles.weatherRiskSource}>
+                Open-Meteo · Current location
+              </Text>
+            </View>
 
-          <View style={{ flex: 1 }}>
-            <Text style={styles.alertTitle}>
-              {riskLevel === 'High Risk'
-                ? 'Flood Risk in Your Area'
-                : riskLevel === 'Moderate Risk'
-                ? 'Weather Advisory'
-                : 'No Immediate Risk'}
-            </Text>
-
-            <Text style={styles.alertText}>
-              {riskLevel === 'High Risk'
-                ? 'Heavy rainfall expected. Avoid low-lying areas near waterways.'
-                : riskLevel === 'Moderate Risk'
-                ? 'Light rainfall expected. Stay updated on weather conditions.'
-                : 'No severe weather conditions detected in your area.'}
-            </Text>
-
-            <View style={styles.alertButtonRow}>
-              <Pressable style={styles.alertSmallButton} onPress={() => router.push('/(tabs)/map' as any)}>
-                <Text style={styles.alertSmallButtonText}>📍 View Map</Text>
-              </Pressable>
-
-              <Pressable style={styles.alertRedButton}>
-                <Text style={styles.alertRedButtonText}>Safety Steps</Text>
-              </Pressable>
+            <View
+              style={[
+                styles.overallRiskBadge,
+                {
+                  backgroundColor: getRiskColors(riskLevel).bg,
+                  borderColor: getRiskColors(riskLevel).border,
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.overallRiskBadgeText,
+                  { color: getRiskColors(riskLevel).text },
+                ]}
+              >
+                {riskLevel.replace(' Risk', '')}
+              </Text>
             </View>
           </View>
 
-          <Text
-            style={[
-              styles.riskText,
-              {
-                color:
-                  riskLevel === 'High Risk'
-                    ? '#DC2626'
-                    : riskLevel === 'Moderate Risk'
-                    ? '#F59E0B'
-                    : '#16A34A',
-              },
-            ]}
-          >
-            {riskLevel}
-          </Text>
+          <WeatherRiskRow
+            icon="🌧️"
+            title="Rain / flood context"
+            level={rainFloodRisk}
+            detail={`${weatherMetrics.rain.toFixed(1)} mm rain · ${weatherMetrics.precipitationProbability.toFixed(0)}% precip. · soil ${weatherMetrics.soilMoisture.toFixed(2)} m³/m³`}
+          />
+
+          <WeatherRiskRow
+            icon="💨"
+            title="Wind risk"
+            level={windRisk}
+            detail={`${weatherMetrics.windSpeed.toFixed(0)} km/h wind · ${weatherMetrics.windGusts.toFixed(0)} km/h gusts`}
+          />
+
+          <WeatherRiskRow
+            icon="🌡️"
+            title="Temperature risk"
+            level={temperatureRisk}
+            detail={`${weatherMetrics.temperature.toFixed(1)}°C · feels ${weatherMetrics.apparentTemperature.toFixed(1)}°C`}
+          />
+
+          <View style={styles.weatherRiskFooter}>
+            <Text style={styles.weatherRiskDisclaimer}>
+              Alerta Ready contextual indicators only — not official warnings.
+            </Text>
+
+            <Pressable
+              style={styles.weatherMapButton}
+              onPress={() => router.push('/(tabs)/map' as any)}
+            >
+              <Text style={styles.weatherMapButtonText}>View hazards on map</Text>
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.preparedCard}>
@@ -714,11 +880,7 @@ export default function DashboardScreen() {
             </Text>
 
             <Text style={styles.mapStat}>
-              ⚠️ {disasterEvents.length} Events
-            </Text>
-
-            <Text style={styles.mapStat}>
-              🌦️ {riskLevel}
+              ⚠️ {disasterEvents.length} Natural events
             </Text>
           </View>
 
@@ -754,24 +916,6 @@ export default function DashboardScreen() {
                 Open
               </Text>
             </Pressable>
-          </View>
-
-          <View style={styles.riskInfoCard}>
-            <Text style={styles.riskInfoTitle}>
-              {riskLevel === 'High Risk'
-                ? '⚠️ Flood Risk Area'
-                : riskLevel === 'Moderate Risk'
-                ? '🌧️ Weather Advisory'
-                : '✅ Conditions Normal'}
-            </Text>
-
-            <Text style={styles.riskInfoText}>
-              {riskLevel === 'High Risk'
-                ? 'Heavy rainfall expected near your current location.'
-                : riskLevel === 'Moderate Risk'
-                ? 'Light rainfall expected near your current location.'
-                : 'No immediate weather threats detected.'}
-            </Text>
           </View>
 
           <Pressable style={styles.directionButton} onPress={() => router.push('/(tabs)/map' as any)}>
@@ -836,6 +980,50 @@ export default function DashboardScreen() {
     </SafeAreaView>
   );
   
+}
+
+function WeatherRiskRow({
+  icon,
+  title,
+  level,
+  detail,
+}: {
+  icon: string;
+  title: string;
+  level: RiskLevel;
+  detail: string;
+}) {
+  const colors = getRiskColors(level);
+
+  return (
+    <View style={styles.weatherRiskRow}>
+      <Text style={styles.weatherRiskIcon}>{icon}</Text>
+
+      <View style={{ flex: 1 }}>
+        <Text style={styles.weatherRiskRowTitle}>{title}</Text>
+        <Text style={styles.weatherRiskDetail}>{detail}</Text>
+      </View>
+
+      <View
+        style={[
+          styles.weatherRiskSmallBadge,
+          {
+            backgroundColor: colors.bg,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <Text
+          style={[
+            styles.weatherRiskSmallBadgeText,
+            { color: colors.text },
+          ]}
+        >
+          {level.replace(' Risk', '')}
+        </Text>
+      </View>
+    </View>
+  );
 }
 
 function Task({ title, xp, completed }: { title: string; xp: string; completed?: boolean }) {
@@ -976,6 +1164,121 @@ const styles = StyleSheet.create({
     color: '#DC2626',
     fontWeight: 'bold',
     fontSize: 10,
+  },
+
+  weatherRiskCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    elevation: 2,
+  },
+
+  weatherRiskHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+
+  weatherRiskTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#111827',
+  },
+
+  weatherRiskSource: {
+    marginTop: 2,
+    fontSize: 9,
+    color: '#6B7280',
+  },
+
+  overallRiskBadge: {
+    minWidth: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+
+  overallRiskBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  weatherRiskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    paddingVertical: 9,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+
+  weatherRiskIcon: {
+    width: 28,
+    fontSize: 18,
+    textAlign: 'center',
+  },
+
+  weatherRiskRowTitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#111827',
+  },
+
+  weatherRiskDetail: {
+    marginTop: 2,
+    fontSize: 8.5,
+    lineHeight: 12,
+    color: '#6B7280',
+  },
+
+  weatherRiskSmallBadge: {
+    minWidth: 48,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+
+  weatherRiskSmallBadgeText: {
+    fontSize: 8,
+    fontWeight: '900',
+  },
+
+  weatherRiskFooter: {
+    marginTop: 6,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  weatherRiskDisclaimer: {
+    flex: 1,
+    fontSize: 7.5,
+    lineHeight: 10,
+    color: '#9CA3AF',
+  },
+
+  weatherMapButton: {
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: '#ECFDF5',
+  },
+
+  weatherMapButtonText: {
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: '#059669',
   },
 
   preparedCard: {
