@@ -1,260 +1,754 @@
-// Create account screen
-
 import { useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TextInput,
-  Pressable,
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+} from 'firebase/auth';
+
+import {
+  doc,
+  setDoc,
+} from 'firebase/firestore';
+
 import { Ionicons } from '@expo/vector-icons';
-import { auth, db } from '../firebase/firebaseConfig';
+
+import {
+  auth,
+  db,
+} from '../firebase/firebaseConfig';
+
+const PRIMARY = '#8B5CF6';
+const PRIMARY_DARK = '#7C3AED';
+
+const BACKGROUND = '#F7F5FF';
+
+const TEXT = '#111827';
+const SECONDARY_TEXT = '#6B7280';
+
+const INPUT_BACKGROUND = '#FFFFFF';
+const INPUT_BORDER = '#E5E1EE';
 
 export default function RegisterScreen() {
-  const [displayName, setDisplayName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [
+    displayName,
+    setDisplayName,
+  ] = useState('');
+
+  const [
+    email,
+    setEmail,
+  ] = useState('');
+
+  const [
+    password,
+    setPassword,
+  ] = useState('');
+
+  const [
+    confirmPassword,
+    setConfirmPassword,
+  ] = useState('');
+
+  const [
+    showPassword,
+    setShowPassword,
+  ] = useState(false);
+
+  const [
+    showConfirmPassword,
+    setShowConfirmPassword,
+  ] = useState(false);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(false);
 
   async function handleRegister() {
     if (!displayName.trim()) {
-      Alert.alert('Error', 'Please enter your display name.');
+      Alert.alert(
+        'Display name required',
+        'Please enter your display name.'
+      );
       return;
     }
 
     if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email.');
+      Alert.alert(
+        'Email required',
+        'Please enter your email address.'
+      );
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters.');
+      Alert.alert(
+        'Password too short',
+        'Password must be at least 6 characters.'
+      );
       return;
     }
 
-    if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match.');
+    if (
+      password !== confirmPassword
+    ) {
+      Alert.alert(
+        'Passwords do not match',
+        'Please make sure both passwords are the same.'
+      );
       return;
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password
+      setLoading(true);
+
+      const userCredential =
+        await createUserWithEmailAndPassword(
+          auth,
+          email.trim(),
+          password
+        );
+
+      await updateProfile(
+        userCredential.user,
+        {
+          displayName:
+            displayName.trim(),
+        }
       );
 
-      await updateProfile(userCredential.user, {
-        displayName: displayName.trim(),
-      });
+      await setDoc(
+        doc(
+          db,
+          'users',
+          userCredential.user.uid
+        ),
+        {
+          displayName:
+            displayName.trim(),
 
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        displayName: displayName.trim(),
-        email: email.trim(),
-        xp: 0,
-        preparedness: 0,
-        level: 1,
-        completedTasks: [],
-        createdAt: new Date(),
-      });
+          email:
+            email.trim(),
 
-      router.replace('/(tabs)/dashboard' as any);
+          xp: 0,
+
+          preparedness: 0,
+
+          level: 1,
+
+          completedTasks: [],
+
+          simulations: {},
+
+          createdAt:
+            new Date(),
+        }
+      );
+
+      router.replace(
+        '/(tabs)/dashboard' as any
+      );
     } catch (error: any) {
-      Alert.alert('Signup Failed', error.message);
+      Alert.alert(
+        'Sign up failed',
+        error?.message ??
+          'Unable to create your account. Please try again.'
+      );
+    } finally {
+      setLoading(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    <SafeAreaView
+      style={styles.safeArea}
     >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={
+          Platform.OS === 'ios'
+            ? 'padding'
+            : undefined
+        }
       >
-        <View style={styles.topSection} />
+        <ScrollView
+          contentContainerStyle={
+            styles.scrollContent
+          }
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={
+            false
+          }
+        >
+          {/* BRAND */}
 
-        <View style={styles.card}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logo}>🛡️</Text>
-          </View>
-
-          <Text style={styles.title}>Create Account</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Display Name"
-            placeholderTextColor="#9CA3AF"
-            value={displayName}
-            onChangeText={setDisplayName}
-          />
-
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#9CA3AF"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Password"
-              placeholderTextColor="#9CA3AF"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-
-            <Pressable onPress={() => setShowPassword(!showPassword)}>
+          <View style={styles.hero}>
+            <View
+              style={styles.logoCircle}
+            >
               <Ionicons
-                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                size={22}
-                color="#6B7280"
+                name="shield-checkmark-outline"
+                size={27}
+                color="#111827"
               />
-            </Pressable>
-          </View>
+            </View>
 
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Confirm Password"
-              placeholderTextColor="#9CA3AF"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry={!showConfirmPassword}
-            />
-
-            <Pressable onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-              <Ionicons
-                name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'}
-                size={22}
-                color="#6B7280"
-              />
-            </Pressable>
-          </View>
-
-          <Pressable style={styles.button} onPress={handleRegister}>
-            <Text style={styles.buttonText}>SIGN UP</Text>
-          </Pressable>
-
-          <Pressable onPress={() => router.push('/login' as any)}>
-            <Text style={styles.linkText}>
-              ALREADY HAVE AN ACCOUNT? LOG IN
+            <Text
+              style={styles.brandName}
+            >
+              Alerta Ready
             </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+
+            <Text
+              style={styles.brandTagline}
+            >
+              Prepared. Informed. Ready.
+            </Text>
+          </View>
+
+          {/* FORM */}
+
+          <View
+            style={styles.formSection}
+          >
+            <Text style={styles.title}>
+              Create account
+            </Text>
+
+            <Text
+              style={styles.description}
+            >
+              Start building your personal
+              emergency preparedness plan.
+            </Text>
+
+            {/* DISPLAY NAME */}
+
+            <View
+              style={
+                styles.inputContainer
+              }
+            >
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color="#111827"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Display name"
+                placeholderTextColor="#94A3B8"
+                value={displayName}
+                onChangeText={
+                  setDisplayName
+                }
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+
+            {/* EMAIL */}
+
+            <View
+              style={
+                styles.inputContainer
+              }
+            >
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color="#111827"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#94A3B8"
+                value={email}
+                onChangeText={
+                  setEmail
+                }
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+              />
+            </View>
+
+            {/* PASSWORD */}
+
+            <View
+              style={
+                styles.inputContainer
+              }
+            >
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color="#111827"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#94A3B8"
+                value={password}
+                onChangeText={
+                  setPassword
+                }
+                secureTextEntry={
+                  !showPassword
+                }
+                autoCapitalize="none"
+                autoComplete="new-password"
+              />
+
+              <Pressable
+                hitSlop={10}
+                onPress={() =>
+                  setShowPassword(
+                    previous =>
+                      !previous
+                  )
+                }
+              >
+                <Ionicons
+                  name={
+                    showPassword
+                      ? 'eye-off-outline'
+                      : 'eye-outline'
+                  }
+                  size={20}
+                  color="#64748B"
+                />
+              </Pressable>
+            </View>
+
+            <Text
+              style={
+                styles.passwordHint
+              }
+            >
+              At least 6 characters
+            </Text>
+
+            {/* CONFIRM PASSWORD */}
+
+            <View
+              style={
+                styles.inputContainer
+              }
+            >
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color="#111827"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm password"
+                placeholderTextColor="#94A3B8"
+                value={confirmPassword}
+                onChangeText={
+                  setConfirmPassword
+                }
+                secureTextEntry={
+                  !showConfirmPassword
+                }
+                autoCapitalize="none"
+                autoComplete="new-password"
+                onSubmitEditing={
+                  handleRegister
+                }
+              />
+
+              <Pressable
+                hitSlop={10}
+                onPress={() =>
+                  setShowConfirmPassword(
+                    previous =>
+                      !previous
+                  )
+                }
+              >
+                <Ionicons
+                  name={
+                    showConfirmPassword
+                      ? 'eye-off-outline'
+                      : 'eye-outline'
+                  }
+                  size={20}
+                  color="#64748B"
+                />
+              </Pressable>
+            </View>
+
+            {/* SIGN UP BUTTON */}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+
+                pressed &&
+                  styles.primaryButtonPressed,
+
+                loading &&
+                  styles.primaryButtonDisabled,
+              ]}
+              disabled={loading}
+              onPress={
+                handleRegister
+              }
+            >
+              {loading ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#FFFFFF"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.primaryButtonText
+                  }
+                >
+                  Sign up
+                </Text>
+              )}
+            </Pressable>
+
+            {/* LOGIN LINK */}
+
+            <View
+              style={styles.accountRow}
+            >
+              <Text
+                style={
+                  styles.accountText
+                }
+              >
+                Already have an account?
+              </Text>
+
+              <Pressable
+                onPress={() =>
+                  router.push(
+                    '/login' as any
+                  )
+                }
+              >
+                <Text
+                  style={
+                    styles.accountLink
+                  }
+                >
+                  Log in
+                </Text>
+              </Pressable>
+            </View>
+
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#8B5CF6',
-  },
+const styles =
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor:
+        BACKGROUND,
+    },
 
-  scrollContent: {
-    flexGrow: 1,
-  },
+    container: {
+      flex: 1,
+      backgroundColor:
+        BACKGROUND,
+    },
 
-  topSection: {
-    flex: 0.35,
-  },
+    scrollContent: {
+      flexGrow: 1,
+      backgroundColor:
+        BACKGROUND,
 
-  card: {
-    flex: 2.2,
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    alignItems: 'center',
-    paddingHorizontal: 28,
-    paddingTop: 18,
-  },
+      paddingBottom: 28,
+    },
 
-  logoCircle: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: '#F8F7FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
+    /* -------------------------
+       BRAND
+       ------------------------- */
 
-  logo: {
-    fontSize: 28,
-  },
+    hero: {
+      minHeight: 270,
 
-  title: {
-    fontSize: 25,
-    fontWeight: 'bold',
-    color: '#2D1B69',
-    marginBottom: 18,
-  },
+      alignItems: 'center',
+      justifyContent: 'center',
 
-  input: {
-    width: '100%',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    padding: 12,
-    marginBottom: 10,
-    fontSize: 14,
-    color: '#111827',
-  },
+      paddingTop: 30,
+      paddingBottom: 25,
+    },
 
-  passwordContainer: {
-    width: '100%',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 12,
-  },
+    logoCircle: {
+      width: 58,
+      height: 58,
 
-  passwordInput: {
-    flex: 1,
-    padding: 12,
-    fontSize: 14,
-    color: '#111827',
-  },
+      borderRadius: 29,
 
-  button: {
-    width: '100%',
-    backgroundColor: '#10B981',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
-  },
+      backgroundColor:
+        'rgba(255,255,255,0.45)',
 
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
+      alignItems: 'center',
+      justifyContent: 'center',
 
-  linkText: {
-    fontSize: 11,
-    color: '#6B5C91',
-    fontWeight: 'bold',
-  },
-});
+      marginBottom: 15,
+
+      shadowColor: '#8B5CF6',
+      shadowOpacity: 0.06,
+      shadowRadius: 12,
+
+      elevation: 1,
+    },
+
+    brandName: {
+      fontSize: 21,
+
+      fontWeight: '900',
+
+      color: TEXT,
+    },
+
+    brandTagline: {
+      marginTop: 5,
+
+      fontSize: 10,
+
+      fontWeight: '600',
+
+      color: '#111827',
+    },
+
+    /* -------------------------
+       FORM
+       ------------------------- */
+
+    formSection: {
+      paddingHorizontal: 25,
+
+      paddingTop: 8,
+
+      paddingBottom: 30,
+      
+      marginTop: -45,
+    },
+
+    title: {
+      fontSize: 24,
+
+      fontWeight: '900',
+
+      color: TEXT,
+    },
+
+    description: {
+      marginTop: 5,
+
+      marginBottom: 18,
+
+      fontSize: 11,
+
+      lineHeight: 16,
+
+      color:
+        SECONDARY_TEXT,
+    },
+
+    /* -------------------------
+       INPUTS
+       ------------------------- */
+
+    inputContainer: {
+      minHeight: 52,
+
+      marginBottom: 11,
+
+      paddingHorizontal: 15,
+
+      borderRadius: 14,
+
+      borderWidth: 1,
+
+      borderColor:
+        INPUT_BORDER,
+
+      backgroundColor:
+        INPUT_BACKGROUND,
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      gap: 12,
+
+      shadowColor: '#000000',
+
+      shadowOpacity: 0.035,
+
+      shadowRadius: 4,
+
+      shadowOffset: {
+        width: 0,
+        height: 2,
+      },
+
+      elevation: 1,
+    },
+
+    input: {
+      flex: 1,
+
+      minHeight: 50,
+
+      paddingVertical: 0,
+
+      fontSize: 12.5,
+
+      color: TEXT,
+    },
+
+    passwordHint: {
+      marginTop: -6,
+
+      marginLeft: 4,
+
+      marginBottom: 9,
+
+      fontSize: 8,
+
+      color: '#94A3B8',
+    },
+
+    /* -------------------------
+       SIGN UP BUTTON
+       ------------------------- */
+
+    primaryButton: {
+      minHeight: 52,
+
+      marginTop: 5,
+
+      borderRadius: 14,
+
+      backgroundColor:
+        PRIMARY,
+
+      alignItems: 'center',
+
+      justifyContent:
+        'center',
+
+      shadowColor:
+        PRIMARY,
+
+      shadowOpacity: 0.2,
+
+      shadowRadius: 7,
+
+      shadowOffset: {
+        width: 0,
+        height: 3,
+      },
+
+      elevation: 3,
+    },
+
+    primaryButtonPressed: {
+      backgroundColor:
+        PRIMARY_DARK,
+
+      transform: [
+        {
+          scale: 0.99,
+        },
+      ],
+    },
+
+    primaryButtonDisabled: {
+      opacity: 0.65,
+    },
+
+    primaryButtonText: {
+      fontSize: 13,
+
+      fontWeight: '900',
+
+      color: '#FFFFFF',
+    },
+
+    /* -------------------------
+       ACCOUNT LINK
+       ------------------------- */
+
+    accountRow: {
+      marginTop: 18,
+
+      flexDirection: 'row',
+
+      alignItems: 'center',
+
+      justifyContent:
+        'center',
+
+      gap: 4,
+    },
+
+    accountText: {
+      fontSize: 10.5,
+
+      color:
+        SECONDARY_TEXT,
+    },
+
+    accountLink: {
+      fontSize: 10.5,
+
+      fontWeight: '900',
+
+      color:
+        PRIMARY_DARK,
+    },
+
+    /* -------------------------
+       TERMS
+       ------------------------- */
+
+    termsText: {
+      marginTop: 18,
+
+      paddingHorizontal: 16,
+
+      textAlign: 'center',
+
+      fontSize: 8,
+
+      lineHeight: 12,
+
+      color: '#9CA3AF',
+    },
+  });

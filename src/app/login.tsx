@@ -1,195 +1,535 @@
-// Login screen
-
 import { useState } from 'react';
 import {
-  StyleSheet,
-  Text,
-  View,
-  TextInput,
-  Pressable,
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../firebase/firebaseConfig';
+import {
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+} from 'firebase/auth';
 import { Ionicons } from '@expo/vector-icons';
+
+import { auth } from '../firebase/firebaseConfig';
+
+const PRIMARY = '#F7F5FF';
+const PRIMARY_DARK = '#7C3AED';
+
+const BACKGROUND = '#F7F5FF';
+const INPUT_BACKGROUND = '#FFFFFF';
+
+const TEXT = '#111827';
+const SECONDARY_TEXT = '#6B7280';
+const BORDER = '#E7E5F4';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [password, setPassword] =
+    useState('');
+
+  const [showPassword, setShowPassword] =
+    useState(false);
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const [resetLoading, setResetLoading] =
+    useState(false);
 
   async function handleLogin() {
+    if (!email.trim()) {
+      Alert.alert(
+        'Email required',
+        'Please enter your email address.'
+      );
+      return;
+    }
+
+    if (!password) {
+      Alert.alert(
+        'Password required',
+        'Please enter your password.'
+      );
+      return;
+    }
+
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
-      router.replace('/(tabs)/dashboard' as any);
+      setLoading(true);
+
+      await signInWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
+
+      router.replace(
+        '/(tabs)/dashboard' as any
+      );
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message);
+      Alert.alert(
+        'Login failed',
+        error?.message ??
+          'Unable to log in. Please try again.'
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (!email.trim()) {
+      Alert.alert(
+        'Enter your email',
+        'Enter your email address first so Alerta Ready can send you a reset link.'
+      );
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+
+      await sendPasswordResetEmail(
+        auth,
+        email.trim()
+      );
+
+      Alert.alert(
+        'Reset email sent',
+        'Check your email for instructions to reset your password.'
+      );
+    } catch (error: any) {
+      Alert.alert(
+        'Unable to send reset email',
+        error?.message ??
+          'Please check your email address and try again.'
+      );
+    } finally {
+      setResetLoading(false);
     }
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.safeArea}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={
+          Platform.OS === 'ios'
+            ? 'padding'
+            : undefined
+        }
       >
-        <View style={styles.topSection} />
-
-        <View style={styles.card}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logo}>🛡️</Text>
-          </View>
-
-          <Text style={styles.title}>Login</Text>
-
-          <TextInput
-            style={styles.input}
-            placeholder="Email"
-            placeholderTextColor="#9CA3AF"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-
-          <View style={styles.passwordContainer}>
-            <TextInput
-              style={styles.passwordInput}
-              placeholder="Password"
-              placeholderTextColor="#9CA3AF"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-            />
-
-            <Pressable onPress={() => setShowPassword(!showPassword)}>
+        <ScrollView
+          contentContainerStyle={
+            styles.scrollContent
+          }
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* PURPLE HEADER */}
+          <View style={styles.heroSection}>
+            <View style={styles.logoCircle}>
               <Ionicons
-                name={showPassword ? 'eye-off-outline' : 'eye-outline'}
-                size={22}
-                color="#6B7280"
+                name="shield-checkmark-outline"
+                size={31}
+                color="#000000"
               />
-            </Pressable>
+            </View>
+
+            <Text style={styles.brandTitle}>
+              Alerta Ready
+            </Text>
+
+            <Text style={styles.brandSubtitle}>
+              Prepared. Informed. Ready.
+            </Text>
           </View>
 
-          <Text style={styles.forgotText}>FORGOT YOUR PASSWORD?</Text>
+          {/* FORM */}
+          <View style={styles.formSection}>
+            <Text style={styles.heading}>
+              Welcome back
+            </Text>
 
-          <Pressable style={styles.button} onPress={handleLogin}>
-            <Text style={styles.buttonText}>LOGIN</Text>
-          </Pressable>
+            <Text style={styles.subheading}>
+              Log in to continue your
+              preparedness journey.
+            </Text>
 
-          <Pressable onPress={() => router.push('/register' as any)}>
-            <Text style={styles.linkText}>CREATE NEW ACCOUNT?</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+            {/* EMAIL */}
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="mail-outline"
+                size={18}
+                color="#000000"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor="#9CA3AF"
+                value={email}
+                onChangeText={setEmail}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+              />
+            </View>
+
+            {/* PASSWORD */}
+            <View style={styles.inputWrapper}>
+              <Ionicons
+                name="lock-closed-outline"
+                size={18}
+                color="#000000"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor="#9CA3AF"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={
+                  !showPassword
+                }
+                autoCapitalize="none"
+                autoComplete="password"
+                onSubmitEditing={
+                  handleLogin
+                }
+              />
+
+              <Pressable
+                hitSlop={10}
+                onPress={() =>
+                  setShowPassword(
+                    previous => !previous
+                  )
+                }
+              >
+                <Ionicons
+                  name={
+                    showPassword
+                      ? 'eye-off-outline'
+                      : 'eye-outline'
+                  }
+                  size={19}
+                  color="#64748B"
+                />
+              </Pressable>
+            </View>
+
+            {/* FORGOT PASSWORD */}
+            <Pressable
+              style={styles.forgotButton}
+              onPress={
+                handleForgotPassword
+              }
+              disabled={resetLoading}
+            >
+              <Text style={styles.forgotText}>
+                {resetLoading
+                  ? 'Sending reset email...'
+                  : 'Forgot password?'}
+              </Text>
+            </Pressable>
+
+            {/* LOGIN */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.primaryButton,
+                pressed &&
+                  styles.primaryButtonPressed,
+                loading &&
+                  styles.primaryButtonDisabled,
+              ]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator
+                  color="#FFFFFF"
+                  size="small"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.primaryButtonText
+                  }
+                >
+                  Log in
+                </Text>
+              )}
+            </Pressable>
+
+            {/* CREATE ACCOUNT */}
+            <View style={styles.accountRow}>
+              <Text
+                style={styles.accountText}
+              >
+                New to Alerta Ready?
+              </Text>
+
+              <Pressable
+                onPress={() =>
+                  router.push(
+                    '/register' as any
+                  )
+                }
+              >
+                <Text
+                  style={styles.accountLink}
+                >
+                  Create account
+                </Text>
+              </Pressable>
+            </View>
+
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: BACKGROUND,
+  },
+
   container: {
     flex: 1,
-    backgroundColor: '#8B5CF6',
+    backgroundColor: BACKGROUND,
   },
 
   scrollContent: {
     flexGrow: 1,
+    backgroundColor: BACKGROUND,
   },
 
-  topSection: {
-    flex: 0.45,
-  },
+  /* HEADER */
 
-  card: {
-    flex: 2,
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+  heroSection: {
+    minHeight: 255,
+    backgroundColor: PRIMARY,
+
     alignItems: 'center',
-    paddingHorizontal: 28,
+    justifyContent: 'center',
+
     paddingTop: 20,
+    paddingBottom: 40,
+
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
   },
 
   logoCircle: {
     width: 66,
     height: 66,
     borderRadius: 33,
-    backgroundColor: '#F8F7FF',
-    justifyContent: 'center',
+
+    backgroundColor:
+      'rgba(255,255,255,0.16)',
+
     alignItems: 'center',
+    justifyContent: 'center',
+
     marginBottom: 14,
   },
 
-  logo: {
-    fontSize: 30,
+  brandTitle: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#111827',
   },
 
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#2D1B69',
+  brandSubtitle: {
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#111827',
+  },
+
+  /* FORM */
+
+  formSection: {
+    flex: 1,
+
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 36,
+    marginTop: -45,
+  },
+
+  heading: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: TEXT,
+  },
+
+  subheading: {
+    marginTop: 6,
     marginBottom: 24,
+
+    fontSize: 13,
+    lineHeight: 19,
+
+    color: SECONDARY_TEXT,
+  },
+
+  /* INPUTS */
+
+  inputWrapper: {
+    minHeight: 56,
+
+    marginBottom: 13,
+
+    paddingHorizontal: 15,
+
+    borderWidth: 1,
+    borderColor: BORDER,
+    borderRadius: 14,
+
+    backgroundColor:
+      INPUT_BACKGROUND,
+
+    flexDirection: 'row',
+    alignItems: 'center',
+
+    gap: 11,
+
+    shadowColor: '#000000',
+    shadowOpacity: 0.025,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+
+    elevation: 1,
   },
 
   input: {
-    width: '100%',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    padding: 12,
-    marginBottom: 12,
-    fontSize: 14,
-    color: '#111827',
-  },
-
-  passwordContainer: {
-    width: '100%',
-    backgroundColor: '#F3F4F6',
-    borderRadius: 6,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingRight: 12,
-  },
-
-  passwordInput: {
     flex: 1,
-    padding: 12,
+
+    minHeight: 54,
+
+    paddingVertical: 0,
+
     fontSize: 14,
-    color: '#111827',
+
+    color: TEXT,
   },
 
-  forgotText: {
-    fontSize: 10,
-    color: '#9A8FB8',
-    marginBottom: 20,
-  },
+  /* FORGOT */
 
-  button: {
-    width: '100%',
-    backgroundColor: '#10B981',
-    paddingVertical: 14,
-    borderRadius: 8,
-    alignItems: 'center',
+  forgotButton: {
+    alignSelf: 'flex-end',
+
+    paddingVertical: 4,
+
     marginBottom: 18,
   },
 
-  buttonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    fontSize: 13,
+  forgotText: {
+    fontSize: 11,
+    fontWeight: '800',
+
+    color: PRIMARY_DARK,
   },
 
-  linkText: {
-    fontSize: 11,
-    color: '#6B5C91',
-    fontWeight: 'bold',
+  /* LOGIN BUTTON */
+
+  primaryButton: {
+    minHeight: 54,
+
+    borderRadius: 14,
+
+    backgroundColor: PRIMARY_DARK,
+
+    alignItems: 'center',
+    justifyContent: 'center',
+
+    shadowColor: PRIMARY,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+
+    elevation: 3,
+  },
+
+  primaryButtonPressed: {
+    backgroundColor:
+      PRIMARY_DARK,
+
+    transform: [
+      {
+        scale: 0.99,
+      },
+    ],
+  },
+
+  primaryButtonDisabled: {
+    opacity: 0.65,
+  },
+
+  primaryButtonText: {
+    fontSize: 15,
+    fontWeight: '900',
+
+    color: '#FFFFFF',
+  },
+
+  /* ACCOUNT */
+
+  accountRow: {
+    marginTop: 20,
+
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+
+    gap: 4,
+  },
+
+  accountText: {
+    fontSize: 12,
+
+    color: SECONDARY_TEXT,
+  },
+
+  accountLink: {
+    fontSize: 12,
+    fontWeight: '900',
+
+    color: PRIMARY_DARK,
+  },
+
+  termsText: {
+    marginTop: 22,
+
+    paddingHorizontal: 15,
+
+    textAlign: 'center',
+
+    fontSize: 9,
+    lineHeight: 14,
+
+    color: '#9CA3AF',
   },
 });
