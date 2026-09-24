@@ -145,7 +145,7 @@ export default function LoginScreen() {
             </View>
 
             <Text style={styles.brandTitle}>
-              Alerta Ready
+              AlertaReady
             </Text>
 
             <Text style={styles.brandSubtitle}>

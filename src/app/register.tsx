@@ -210,7 +210,7 @@ export default function RegisterScreen() {
             <Text
               style={styles.brandName}
             >
-              Alerta Ready
+              AlertaReady
             </Text>
 
             <Text
