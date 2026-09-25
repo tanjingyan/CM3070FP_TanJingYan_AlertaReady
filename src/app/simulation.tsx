@@ -20,6 +20,12 @@ import {
 } from 'firebase/firestore';
 
 import { auth, db } from '../firebase/firebaseConfig';
+import {
+  getAdditionalSimulationXp,
+  getEligibleSimulationXp,
+  getLevelFromXp,
+  getSimulationScore,
+} from '../utils/progressLogic';
 
 type Choice = {
   id: 'a' | 'b';
@@ -377,14 +383,6 @@ const scenarios: Record<string, SimulationScenario> = {
   },
 };
 
-function getLevelFromXp(xp: number) {
-  if (xp >= 1000) return 5;
-  if (xp >= 500) return 4;
-  if (xp >= 250) return 3;
-  if (xp >= 100) return 2;
-  return 1;
-}
-
 export default function SimulationScreen() {
   const { scenario } = useLocalSearchParams<{
     scenario?: string;
@@ -428,10 +426,9 @@ export default function SimulationScreen() {
     100;
 
   const finalPercent =
-    Math.round(
-      (correctCount /
-        selectedScenario.stages.length) *
-        100
+    getSimulationScore(
+      correctCount,
+      selectedScenario.stages.length
     );
 
   const scoreLabel = useMemo(() => {
@@ -500,14 +497,15 @@ export default function SimulationScreen() {
     }
 
     const scorePercent =
-      Math.round(
-        (safeDecisions /
-          selectedScenario.stages.length) *
-          100
+      getSimulationScore(
+        safeDecisions,
+        selectedScenario.stages.length
       );
 
     const eligibleXp =
-      safeDecisions * 10;
+      getEligibleSimulationXp(
+        safeDecisions
+      );
 
     setSavingResult(true);
 
@@ -562,10 +560,9 @@ export default function SimulationScreen() {
               );
 
             const additionalXp =
-              Math.max(
-                0,
-                eligibleXp -
-                  previousXpAwarded
+              getAdditionalSimulationXp(
+                eligibleXp,
+                previousXpAwarded
               );
 
             const currentXp =

@@ -8,6 +8,11 @@ import { getMessaging } from 'firebase-admin/messaging';
 import * as logger from 'firebase-functions/logger';
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import {
+  getDistanceKm,
+  isEarthquakeRelevant,
+  isEonetEventRelevant,
+} from './hazardLogic';
 
 type WeatherRiskLevel =
   | 'Low Risk'
@@ -142,33 +147,6 @@ type CandidateAlert = {
   screen?: 'map' | 'alerts';
   isTest?: boolean;
 };
-
-function getDistanceKm(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number
-) {
-  const radius = 6371;
-
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) *
-      Math.cos((lat2 * Math.PI) / 180) *
-      Math.sin(dLon / 2) ** 2;
-
-  const c =
-    2 *
-    Math.atan2(
-      Math.sqrt(a),
-      Math.sqrt(1 - a)
-    );
-
-  return radius * c;
-}
 
 function safeId(value: string) {
   return value.replace(/[^a-zA-Z0-9_-]/g, '_');
@@ -370,7 +348,7 @@ export const sendTestHazard =
 export const checkHazardsAndNotify =
   onSchedule(
     {
-      schedule: 'every 5 minutes',
+      schedule: '* * * * *',
       timeZone: 'UTC',
       maxInstances: 1,
     },
@@ -467,9 +445,10 @@ export const checkHazardsAndNotify =
             );
 
           const relevant =
-            (magnitude >= 5 && distanceKm <= 300) ||
-            (magnitude >= 4 && distanceKm <= 100) ||
-            (magnitude >= 2.5 && distanceKm <= 30);
+            isEarthquakeRelevant(
+              magnitude,
+              distanceKm
+            );
 
           if (!relevant) continue;
 
@@ -511,7 +490,13 @@ export const checkHazardsAndNotify =
               point.longitude
             );
 
-          if (distanceKm > 50) continue;
+          if (
+            !isEonetEventRelevant(
+              distanceKm
+            )
+          ) {
+            continue;
+          }
 
           const sourceId =
             String(
@@ -681,7 +666,7 @@ export const checkHazardsAndNotify =
                 : 'Unknown';
 
             // Notify only when the OVERALL state transitions
-            // into High Risk, avoiding repeated 5-minute pushes.
+            // into High Risk, avoiding repeated 1-minute pushes.
             if (
               currentRisk === 'High Risk' &&
               previousRisk !== 'High Risk'
