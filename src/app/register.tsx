@@ -140,20 +140,13 @@ export default function RegisterScreen() {
         {
           displayName:
             displayName.trim(),
-
           email:
             email.trim(),
-
           xp: 0,
-
           preparedness: 0,
-
           level: 1,
-
           completedTasks: [],
-
           simulations: {},
-
           createdAt:
             new Date(),
         }

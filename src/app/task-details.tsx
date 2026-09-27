@@ -1,5 +1,7 @@
 import { useState } from 'react';
+
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import {
   View,
   Text,
@@ -9,10 +11,12 @@ import {
   ScrollView,
   Modal,
 } from 'react-native';
+
 import {
   router,
   useLocalSearchParams,
 } from 'expo-router';
+
 import { useUserProgress } from '../hooks/use-UserProgress';
 
 const taskData: any = {
@@ -23,6 +27,7 @@ const taskData: any = {
     reward: 50,
     description:
       'Learn what belongs in an emergency kit, prepare the essentials, and test your knowledge.',
+
     learn: {
       intro:
         'An emergency kit should contain basic supplies that help you stay safe and independent if normal services are disrupted.',
@@ -34,6 +39,7 @@ const taskData: any = {
       tip:
         'Keep your kit somewhere easy to reach and review it regularly.',
     },
+
     checklist: [
       'Water and non-perishable food',
       'Flashlight and spare batteries',
@@ -42,6 +48,7 @@ const taskData: any = {
       'Important medication',
       'Whistle and emergency blanket',
     ],
+
     quiz: [
       {
         question:
@@ -52,7 +59,9 @@ const taskData: any = {
           'Gaming controller',
         ],
         answer: 'Flashlight',
+        feedback: 'A flashlight gives reliable light during a power outage without depending on mains electricity.',
       },
+
       {
         question:
           'Why should you keep a first aid kit?',
@@ -62,7 +71,9 @@ const taskData: any = {
           'For charging phone',
         ],
         answer: 'For minor injuries',
+        feedback: 'A first aid kit helps you treat minor injuries safely while further medical help is arranged if needed.',
       },
+
       {
         question:
           'What should emergency food be?',
@@ -72,10 +83,12 @@ const taskData: any = {
           'Unpacked food',
         ],
         answer: 'Non-perishable',
+        feedback: 'Non-perishable food can be stored for longer and does not rely on refrigeration during service disruptions.',
       },
-    ],
-  },
 
+    ],
+
+  },
   familyPlan: {
     number: 2,
     icon: '👨‍👩‍👧',
@@ -83,17 +96,21 @@ const taskData: any = {
     reward: 40,
     description:
       'Build a simple family plan for communication, meeting points and emergency contacts.',
+
     learn: {
       intro:
         'A family emergency plan helps everyone know what to do if you are separated or normal communication is disrupted.',
+
       points: [
         'Choose an emergency contact everyone knows.',
         'Agree on a nearby and an alternative meeting point.',
         'Make sure each family member knows important phone numbers.',
       ],
+
       tip:
         'Review the plan together so everyone understands their role.',
     },
+
     checklist: [
       'Choose an emergency contact',
       'Choose a family meeting point',
@@ -101,6 +118,7 @@ const taskData: any = {
       'Discuss how to communicate',
       'Review the plan with family',
     ],
+
     quiz: [
       {
         question:
@@ -111,7 +129,9 @@ const taskData: any = {
           'To charge phones',
         ],
         answer: 'To reunite safely',
+        feedback: 'A pre-agreed meeting point helps family members reunite safely if they become separated during an emergency.',
       },
+
       {
         question:
           'Who should know the emergency contact?',
@@ -121,8 +141,11 @@ const taskData: any = {
           'Only neighbours',
         ],
         answer: 'Everyone in the household',
+        feedback: 'Everyone should know the emergency contact so any household member can reach the same trusted person if communication is disrupted.',
       },
+
     ],
+
   },
 
   evacuationRoute: {
@@ -143,12 +166,14 @@ const taskData: any = {
       tip:
         'Practise the route so you can follow it without relying on memory under stress.',
     },
+
     checklist: [
       'Identify your primary exit route',
       'Identify an alternative route',
       'Choose a safe meeting point',
       'Check for possible route hazards',
     ],
+
     quiz: [
       {
         question:
@@ -160,7 +185,9 @@ const taskData: any = {
         ],
         answer:
           'Your main route may be blocked',
+        feedback: 'An alternative route is important because the primary route may become blocked, unsafe or inaccessible during an emergency.',
       },
+
       {
         question:
           'When should you practise an evacuation route?',
@@ -170,10 +197,12 @@ const taskData: any = {
           'Never',
         ],
         answer: 'Before an emergency',
+        feedback: 'Practising before an emergency helps you remember the route and reduces confusion when evacuation is actually needed.',
       },
-    ],
-  },
 
+    ],
+
+  },
   documents: {
     number: 4,
     icon: '📄',
@@ -181,6 +210,7 @@ const taskData: any = {
     reward: 20,
     description:
       'Prepare important personal records so they can be accessed after an emergency.',
+
     learn: {
       intro:
         'Important documents may be difficult to replace quickly after a disaster, so protected copies can support recovery.',
@@ -192,12 +222,14 @@ const taskData: any = {
       tip:
         'Review your stored documents regularly and update expired copies.',
     },
+
     checklist: [
       'Gather identification documents',
       'Gather insurance or financial records',
       'Protect physical copies',
       'Create secure digital backups',
     ],
+
     quiz: [
       {
         question:
@@ -209,10 +241,12 @@ const taskData: any = {
         ],
         answer:
           'For recovery if originals are damaged',
+        feedback: 'Secure digital backups can help you recover important information if physical originals are damaged or unavailable.',
       },
-    ],
-  },
 
+    ],
+
+  },
   firstAid: {
     number: 5,
     icon: '⛑️',
@@ -231,12 +265,14 @@ const taskData: any = {
       tip:
         'A first-aid course provides more reliable practical training than reading alone.',
     },
+
     checklist: [
       'Locate your first aid kit',
       'Check basic supplies',
       'Review emergency contact numbers',
       'Know when to seek professional help',
     ],
+
     quiz: [
       {
         question:
@@ -248,12 +284,17 @@ const taskData: any = {
         ],
         answer:
           'Seek professional medical help',
+        feedback: 'Serious injuries require professional medical assistance. Basic first aid should only provide immediate support while help is arranged.',
       },
+
     ],
+
   },
+
 };
 
 export default function TaskDetailsScreen() {
+
   const { taskId } =
     useLocalSearchParams();
 
@@ -289,9 +330,9 @@ export default function TaskDetailsScreen() {
 
   const [itemCooldown, setItemCooldown] =
     useState(false);
-
-  // Alerta Ready "Preparedness Challenge" interaction:
+  // Alerta Ready quiz interaction:
   // one scenario question at a time with immediate feedback.
+
   const [currentChallengeIndex, setCurrentChallengeIndex] =
     useState(0);
 
@@ -348,7 +389,6 @@ export default function TaskDetailsScreen() {
     if (isCompleted) {
       return;
     }
-
     setLearnCompleted(true);
   }
 
@@ -356,11 +396,13 @@ export default function TaskDetailsScreen() {
     item: string
   ) {
     if (
+
       !learnCompleted ||
       isCompleted ||
       checkedItems.includes(item) ||
       itemCooldown
     ) {
+
       return;
     }
 
@@ -374,6 +416,7 @@ export default function TaskDetailsScreen() {
   }
 
   function confirmChecklistItem() {
+
     if (
       !selectedChecklistItem ||
       isCompleted
@@ -387,21 +430,21 @@ export default function TaskDetailsScreen() {
     ]);
 
     closeChecklistConfirmation();
-
     setItemCooldown(true);
 
     setTimeout(() => {
       setItemCooldown(false);
     }, 700);
+
   }
 
   function selectAnswer(
     questionIndex: number,
     answer: string
   ) {
+
     if (
       !checklistDone ||
-      isCompleted ||
       selectedAnswers[questionIndex] !== undefined
     ) {
       return;
@@ -425,7 +468,6 @@ export default function TaskDetailsScreen() {
     ) {
       return;
     }
-
     if (
       currentChallengeIndex <
       task.quiz.length - 1
@@ -437,15 +479,12 @@ export default function TaskDetailsScreen() {
   }
 
   function retryChallenge() {
-    if (isCompleted) {
-      return;
-    }
-
     setSelectedAnswers([]);
     setCurrentChallengeIndex(0);
   }
-
+  
   async function handleCompleteModule() {
+
     if (isCompleted) {
       return;
     }
@@ -468,8 +507,8 @@ export default function TaskDetailsScreen() {
 
     if (!quizPassed) {
       Alert.alert(
-        'Challenge not passed',
-        'Complete the Preparedness Challenge successfully to finish this module.'
+        'Quiz not passed',
+        'Complete the Quiz successfully to finish this module.'
       );
       return;
     }
@@ -489,7 +528,7 @@ export default function TaskDetailsScreen() {
 
   const currentChallenge =
     task.quiz[currentChallengeIndex];
-
+    
   const currentChallengeAnswer =
     selectedAnswers[currentChallengeIndex];
 
@@ -539,7 +578,6 @@ export default function TaskDetailsScreen() {
             Modules
           </Text>
         </Pressable>
-
         {/* Module header */}
         <View style={styles.moduleBadgeRow}>
           <View style={styles.moduleNumberBadge}>
@@ -547,44 +585,39 @@ export default function TaskDetailsScreen() {
               MODULE {task.number}
             </Text>
           </View>
-
           <View style={styles.rewardBadge}>
             <Text style={styles.rewardBadgeText}>
-              ⚡ +{task.reward} XP
+              {isCompleted
+                ? '✓ XP already earned'
+                : `⚡ +${task.reward} XP`}
             </Text>
           </View>
         </View>
-
         <View style={styles.titleRow}>
           <View style={styles.headerIconBox}>
             <Text style={styles.headerIcon}>
               {task.icon}
             </Text>
           </View>
-
           <View style={{ flex: 1 }}>
             <Text style={styles.title}>
               {task.title}
             </Text>
-
             <Text style={styles.description}>
               {task.description}
             </Text>
           </View>
         </View>
-
         {/* Section progress */}
         <View style={styles.moduleProgressCard}>
           <View style={styles.moduleProgressHeader}>
             <Text style={styles.moduleProgressTitle}>
               Module Progress
             </Text>
-
             <Text style={styles.moduleProgressCount}>
               {completedSections}/3 sections
             </Text>
           </View>
-
           <View style={styles.moduleStepsRow}>
             <ModuleStep
               number={1}
@@ -597,9 +630,7 @@ export default function TaskDetailsScreen() {
                     : 'locked'
               }
             />
-
             <View style={styles.stepLine} />
-
             <ModuleStep
               number={2}
               label="Checklist"
@@ -611,12 +642,10 @@ export default function TaskDetailsScreen() {
                     : 'locked'
               }
             />
-
             <View style={styles.stepLine} />
-
             <ModuleStep
               number={3}
-              label="Challenge"
+              label="Quiz"
               state={
                 isCompleted || quizPassed
                   ? 'complete'
@@ -627,7 +656,6 @@ export default function TaskDetailsScreen() {
             />
           </View>
         </View>
-
         {/* SECTION 1: Learn */}
         <View
           style={[
@@ -642,7 +670,6 @@ export default function TaskDetailsScreen() {
                 1
               </Text>
             </View>
-
             <View style={{ flex: 1 }}>
               <Text style={styles.sectionTitle}>
                 Learn
@@ -651,18 +678,15 @@ export default function TaskDetailsScreen() {
                 Understand the essentials first.
               </Text>
             </View>
-
             {(learnCompleted || isCompleted) && (
               <Text style={styles.sectionCompleteIcon}>
                 ✓
               </Text>
             )}
           </View>
-
           <Text style={styles.learnIntro}>
             {task.learn.intro}
           </Text>
-
           <View style={styles.learningPointList}>
             {task.learn.points.map(
               (point: string) => (
@@ -675,7 +699,6 @@ export default function TaskDetailsScreen() {
                       ✓
                     </Text>
                   </View>
-
                   <Text style={styles.learningPointText}>
                     {point}
                   </Text>
@@ -683,7 +706,6 @@ export default function TaskDetailsScreen() {
               )
             )}
           </View>
-
           <View style={styles.tipCard}>
             <Text style={styles.tipLabel}>
               KEY TIP
@@ -692,7 +714,6 @@ export default function TaskDetailsScreen() {
               {task.learn.tip}
             </Text>
           </View>
-
           {!learnCompleted &&
             !isCompleted && (
               <Pressable
@@ -705,7 +726,6 @@ export default function TaskDetailsScreen() {
               </Pressable>
             )}
         </View>
-
         {/* SECTION 2: Checklist */}
         <View
           style={[
@@ -723,7 +743,6 @@ export default function TaskDetailsScreen() {
                 2
               </Text>
             </View>
-
             <View style={{ flex: 1 }}>
               <Text style={styles.sectionTitle}>
                 Checklist
@@ -732,7 +751,6 @@ export default function TaskDetailsScreen() {
                 Confirm your practical preparation.
               </Text>
             </View>
-
             {checklistDone ? (
               <Text style={styles.sectionCompleteIcon}>
                 ✓
@@ -743,7 +761,6 @@ export default function TaskDetailsScreen() {
               </Text>
             ) : null}
           </View>
-
           {!learnCompleted &&
           !isCompleted ? (
             <LockedMessage
@@ -766,13 +783,11 @@ export default function TaskDetailsScreen() {
                     ]}
                   />
                 </View>
-
                 <Text style={styles.checklistProgressText}>
                   {completedChecklistCount}/
                   {task.checklist.length}
                 </Text>
               </View>
-
               <View style={styles.checklistList}>
                 {task.checklist.map(
                   (item: string) => {
@@ -781,12 +796,10 @@ export default function TaskDetailsScreen() {
                       checkedItems.includes(
                         item
                       );
-
                     const disabled =
                       isCompleted ||
                       completed ||
                       itemCooldown;
-
                     return (
                       <Pressable
                         key={item}
@@ -818,7 +831,6 @@ export default function TaskDetailsScreen() {
                             </Text>
                           )}
                         </View>
-
                         <Text
                           style={[
                             styles.checkText,
@@ -833,7 +845,6 @@ export default function TaskDetailsScreen() {
                   }
                 )}
               </View>
-
               {itemCooldown &&
                 !checklistDone && (
                   <Text style={styles.cooldownText}>
@@ -843,7 +854,6 @@ export default function TaskDetailsScreen() {
             </>
           )}
         </View>
-
         {/* SECTION 3: Quiz */}
         <View
           style={[
@@ -860,17 +870,15 @@ export default function TaskDetailsScreen() {
                 3
               </Text>
             </View>
-
             <View style={{ flex: 1 }}>
               <Text style={styles.sectionTitle}>
-                Preparedness Challenge
+                Quiz
               </Text>
               <Text style={styles.sectionSubtitle}>
                 Apply what you learned to short emergency scenarios.
               </Text>
             </View>
-
-            {quizPassed ? (
+            {(quizPassed || isCompleted) ? (
               <Text style={styles.sectionCompleteIcon}>
                 ✓
               </Text>
@@ -880,10 +888,9 @@ export default function TaskDetailsScreen() {
               </Text>
             ) : null}
           </View>
-
           {!checklistDone ? (
             <LockedMessage
-              text="Complete the checklist to unlock the Preparedness Challenge."
+              text="Complete the checklist to unlock the Quiz."
             />
           ) : challengeFinished ? (
             <View style={styles.challengeResultCard}>
@@ -899,30 +906,33 @@ export default function TaskDetailsScreen() {
                   {quizPassed ? '✓' : '↻'}
                 </Text>
               </View>
-
               <Text style={styles.challengeResultTitle}>
                 {quizPassed
-                  ? 'Challenge Complete'
+                  ? 'Quiz Complete'
                   : 'Review and Try Again'}
               </Text>
-
               <Text style={styles.challengeResultScore}>
                 {correctAnswers} of {task.quiz.length} correct
               </Text>
-
               <Text style={styles.challengeResultText}>
                 {quizPassed
                   ? 'You successfully applied the preparedness guidance from this module.'
-                  : 'Some responses need another look. Review the feedback and retry the challenge.'}
+                  : 'Some responses need another look. Review the feedback and retry the quiz.'}
               </Text>
-
-              {!quizPassed && (
+              {isCompleted && (
+                <Text style={styles.replayNoXpText}>
+                  Replay mode • No additional XP is awarded
+                </Text>
+              )}
+              {(isCompleted || !quizPassed) && (
                 <Pressable
                   style={styles.retryChallengeButton}
                   onPress={retryChallenge}
                 >
                   <Text style={styles.retryChallengeButtonText}>
-                    Retry Challenge
+                    {quizPassed
+                      ? 'Replay Quiz'
+                      : 'Retry Quiz'}
                   </Text>
                 </Pressable>
               )}
@@ -932,15 +942,13 @@ export default function TaskDetailsScreen() {
               <View style={styles.challengeTopRow}>
                 <View style={styles.challengeLabelPill}>
                   <Text style={styles.challengeLabelText}>
-                    PREPAREDNESS CHALLENGE
+                    QUIZ
                   </Text>
                 </View>
-
                 <Text style={styles.challengeCounter}>
                   {currentChallengeIndex + 1} / {task.quiz.length}
                 </Text>
               </View>
-
               <View style={styles.challengeProgressTrack}>
                 <View
                   style={[
@@ -951,29 +959,24 @@ export default function TaskDetailsScreen() {
                   ]}
                 />
               </View>
-
               <View style={styles.scenarioCard}>
                 <View style={styles.scenarioIconWrap}>
                   <Text style={styles.scenarioIcon}>
                     {task.icon}
                   </Text>
                 </View>
-
                 <View style={{ flex: 1 }}>
                   <Text style={styles.scenarioLabel}>
                     SCENARIO
                   </Text>
-
                   <Text style={styles.scenarioQuestion}>
                     {currentChallenge.question}
                   </Text>
                 </View>
               </View>
-
               <Text style={styles.chooseResponseText}>
                 Choose your response
               </Text>
-
               <View style={styles.responseList}>
                 {currentChallenge.options.map(
                   (
@@ -983,11 +986,9 @@ export default function TaskDetailsScreen() {
                     const selected =
                       currentChallengeAnswer ===
                       option;
-
                     const isCorrectOption =
                       option ===
                       currentChallenge.answer;
-
                     const optionIcon =
                       optionIndex === 0
                         ? 'A'
@@ -996,7 +997,6 @@ export default function TaskDetailsScreen() {
                           : optionIndex === 2
                             ? 'C'
                             : 'D';
-
                     return (
                       <Pressable
                         key={option}
@@ -1047,7 +1047,6 @@ export default function TaskDetailsScreen() {
                             {optionIcon}
                           </Text>
                         </View>
-
                         <Text
                           style={[
                             styles.responseText,
@@ -1062,7 +1061,6 @@ export default function TaskDetailsScreen() {
                         >
                           {option}
                         </Text>
-
                         <Text style={styles.responseChevron}>
                           {challengeAnswered &&
                           isCorrectOption
@@ -1078,7 +1076,6 @@ export default function TaskDetailsScreen() {
                   }
                 )}
               </View>
-
               {challengeAnswered && (
                 <View
                   style={[
@@ -1100,23 +1097,20 @@ export default function TaskDetailsScreen() {
                       {challengeCorrect ? '✓' : '!'}
                     </Text>
                   </View>
-
                   <View style={{ flex: 1 }}>
                     <Text style={styles.feedbackPanelTitle}>
                       {challengeCorrect
                         ? 'Good decision'
                         : 'Review this response'}
                     </Text>
-
                     <Text style={styles.feedbackPanelText}>
                       {challengeCorrect
-                        ? 'This response matches the preparedness guidance in this module.'
-                        : `Recommended response: ${currentChallenge.answer}`}
+                        ? currentChallenge.feedback
+                        : `Recommended response: ${currentChallenge.answer}. ${currentChallenge.feedback}`}
                     </Text>
                   </View>
                 </View>
               )}
-
               {challengeAnswered &&
                 !isLastChallenge && (
                   <Pressable
@@ -1126,25 +1120,22 @@ export default function TaskDetailsScreen() {
                     <Text style={styles.continueChallengeButtonText}>
                       Continue
                     </Text>
-
                     <Text style={styles.continueChallengeArrow}>
                       →
                     </Text>
                   </Pressable>
                 )}
-
               {challengeAnswered &&
                 isLastChallenge && (
                   <View style={styles.resultReadyCard}>
                     <Text style={styles.resultReadyText}>
-                      Response recorded. Your challenge result is ready.
+                      Response recorded. Your quiz result is ready.
                     </Text>
                   </View>
                 )}
             </View>
           )}
         </View>
-
         {/* Completion */}
         <Pressable
           disabled={
@@ -1169,14 +1160,12 @@ export default function TaskDetailsScreen() {
               : `Complete Module • +${task.reward} XP`}
           </Text>
         </Pressable>
-
         {!isCompleted && (
           <Text style={styles.completeHint}>
-            Finish Learn, Checklist and Preparedness Challenge to complete this module.
+            Finish Learn, Checklist and Quiz to complete this module.
           </Text>
         )}
       </ScrollView>
-
       {/* Checklist confirmation */}
       <Modal
         visible={confirmationVisible}
@@ -1193,24 +1182,19 @@ export default function TaskDetailsScreen() {
               closeChecklistConfirmation
             }
           />
-
           <View style={styles.confirmationSheet}>
             <View style={styles.sheetHandle} />
-
             <View style={styles.sheetIconBox}>
               <Text style={styles.sheetIcon}>
                 {task.icon}
               </Text>
             </View>
-
             <Text style={styles.sheetTitle}>
               {selectedChecklistItem}
             </Text>
-
             <Text style={styles.sheetSubtitle}>
               Confirm that you have completed this preparation step.
             </Text>
-
             <Pressable
               style={styles.confirmButton}
               onPress={confirmChecklistItem}
@@ -1219,7 +1203,6 @@ export default function TaskDetailsScreen() {
                 Yes, completed
               </Text>
             </Pressable>
-
             <Pressable
               style={styles.notYetButton}
               onPress={
@@ -1236,7 +1219,6 @@ export default function TaskDetailsScreen() {
     </SafeAreaView>
   );
 }
-
 function ModuleStep({
   number,
   label,
@@ -1273,7 +1255,6 @@ function ModuleStep({
             : number}
         </Text>
       </View>
-
       <Text
         style={[
           styles.moduleStepLabel,
@@ -1518,7 +1499,7 @@ const styles = StyleSheet.create({
     gap: 9,
     marginBottom: 12,
   },
-
+  
   sectionNumberCircle: {
     width: 28,
     height: 28,
@@ -1816,7 +1797,7 @@ const styles = StyleSheet.create({
   scenarioIcon: {
     fontSize: 18,
   },
-
+  
   scenarioLabel: {
     marginBottom: 4,
     fontSize: 7,
@@ -1983,7 +1964,7 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     backgroundColor: '#079455',
   },
-
+  
   continueChallengeButtonText: {
     fontSize: 10,
     fontWeight: '900',
@@ -2065,6 +2046,15 @@ const styles = StyleSheet.create({
     color: '#667085',
   },
 
+  replayNoXpText: {
+    marginTop: 8,
+    marginBottom: 2,
+    textAlign: 'center',
+    fontSize: 8.5,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+
   retryChallengeButton: {
     alignSelf: 'stretch',
     minHeight: 41,
@@ -2099,7 +2089,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#FFFFFF',
   },
-
+  
   completeButtonTextDisabled: {
     color: '#9CA3AF',
   },
@@ -2203,4 +2193,5 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#4B5563',
   },
+  
 });

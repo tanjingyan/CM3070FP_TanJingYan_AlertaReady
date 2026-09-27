@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
   sectionSubtitleSmall: {
     marginTop: -6,
     marginBottom: 10,
-    fontSize: 9.5,
+    fontSize: 10,
     lineHeight: 13,
     color: '#6B7280',
   },
@@ -980,7 +980,7 @@ const styles = StyleSheet.create({
 
   resourceCardSubtitle: {
     marginTop: 4,
-    fontSize: 8.5,
+    fontSize: 10,
     lineHeight: 12,
     color: '#6B7280',
   },

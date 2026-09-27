@@ -299,7 +299,7 @@ export default function TasksScreen() {
                 Modules
               </Text>
               <Text style={styles.segmentSub}>
-                Learn & test
+                Learn & Test
               </Text>
             </View>
           </Pressable>
@@ -955,7 +955,7 @@ const styles = StyleSheet.create({
   segmentSub: {
     marginTop: 1,
     fontSize: 8,
-    color: '#94A3B8',
+    color: '#070707',
   },
 
   learningFlowCard: {
