@@ -1,56 +1,67 @@
-# Welcome to your Expo app 👋
+# Alerta Ready
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Alerta Ready is a personalised disaster preparedness mobile application developed using React Native and Expo.
 
-## Get started
+The application aims to help users improve disaster preparedness through learning activities, scenario-based simulations, gamification, location-aware hazard information, emergency resources and near-real-time hazard notifications.
+<img width="16534" height="7691" alt="alertaready GIVE ME AAAAAA pls (4)" src="https://github.com/user-attachments/assets/4cf1a3af-1bb5-43d7-977b-1d8f75b8c24a" />
 
-1. Install dependencies
+## Android Application
 
-   ```bash
-   npm install
-   ```
+Alerta Ready is built for Android using Expo and EAS Build.
 
-2. Start the app
+An installable Android build of Alerta Ready is available below:
 
-   ```bash
-   npx expo start
-   ```
+**APK / EAS Build:** [Download Alerta Ready](https://expo.dev/accounts/skubongz/projects/AlertaReady/builds/28b7c75b-60f3-42b9-a6ab-ebd3405f823d)
 
-In the output, you'll find options to open the app in a
+> **Note:** The EAS Build download link is available until 25 December 2026.
+> 
+> Alerta Ready was primarily developed and tested on Android. 
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Main Features
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+- User registration and login using Firebase Authentication
+- Personalised Home dashboard
+- Preparedness learning modules
+- Learn → Checklist → Quiz workflow
+- Scenario-based disaster simulations
+- XP, levels, preparedness progress and badges
+- Emergency Map with location search
+- Current and recent hazard information
+- Hazard filters and contextual distance information
+- Nearby hospitals and emergency shelter discovery
+- Emergency Resources
+  - First Aid
+  - Emergency Contacts
+  - Evacuation Planning
+  - Important Documents
+- Near-real-time scheduled hazard notifications
+- Alert history
+- User profile and profile editing
 
-## Get a fresh project
+## Technologies Used
 
-When you're ready, run:
+- React Native
+- Expo
+- Expo Router
+- TypeScript
+- Firebase Authentication
+- Cloud Firestore
+- Firebase Cloud Messaging
+- Firebase Cloud Functions
+- Cloud Scheduler
+- Expo Location
+- React Native Maps
+- External hazard, weather, location and emergency-facility APIs
+- EAS Build
 
-```bash
-npm run reset-project
-```
+## Installation
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Install the Android APK
 
-### Other setup steps
+This is the recommended method for testing the completed application.
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+1. Open the EAS Build link provided above.
+2. Download the Android APK.
+3. If prompted, allow installation from unknown sources.
+4. Tap **Install**.
+5. Open **Alerta Ready** after installation.
